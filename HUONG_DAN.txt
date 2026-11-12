@@ -22,8 +22,16 @@ CÔNG CỤ TẢI VIDEO HÀNG LOẠT TỪ FILE EXCEL
    - Trang chủ: bấm "Chọn file Excel", hoặc dán link vào ô để tải nhanh.
    - Danh sách tải: xem trạng thái từng link, lọc link lỗi, "Thử lại link lỗi".
    - Đăng nhập (cookie): mở thư mục cookie và xem tool đã đọc được file nào.
-   - Cài đặt: chất lượng, thư mục lưu, tình trạng các thành phần.
-   Giao diện chỉ chạy trên máy bạn (địa chỉ 127.0.0.1), không gửi dữ liệu đi đâu.
+   - Cài đặt: chất lượng, số link tải cùng lúc, thư mục lưu, tình trạng các thành phần.
+   - Số link tải cùng lúc (mặc định 3): tool tải vài link song song cho nhanh, nhưng mỗi
+     nền tảng (TikTok, Facebook, Douyin...) vẫn chỉ tải một link một lúc để không bị chặn.
+     Máy yếu hoặc hay gặp lỗi thì chọn 1.
+   - Bản mới: mỗi lần mở, tool hỏi kho GitHub của tool xem có bản mới không. Nếu có, góc
+     dưới bên trái hiện "Có bản ... - Cập nhật". Bấm thì tool tải bản mới, kiểm tra file
+     rồi tự mở lại. Bản cũ được giữ trong thư mục _tam\ban_cu_<số>. Tool không tự cập
+     nhật khi bạn chưa bấm.
+   Giao diện chỉ chạy trên máy bạn (địa chỉ 127.0.0.1). Tool không gửi danh sách link hay
+   file của bạn đi đâu; nó chỉ tải video, cập nhật yt-dlp và hỏi số phiên bản mới.
 
 3b. CHẠY BẰNG DÒNG LỆNH (cách cũ, vẫn dùng được)
    - Cách 1: Kéo thả file Excel vào CHAY_TOOL.bat.

@@ -39,14 +39,19 @@ class DungTai(BaseException):
 S = {
     "items": [], "excel": "", "outdir": "", "running": False, "stopping": False, "cur": None,
     "env": {"ready": False}, "report": "", "last_poll": time.time(), "next_id": 1, "ffmpeg": None,
+    "luong": 3,          # số link tải cùng lúc (mỗi nền tảng vẫn chỉ 1 link một lúc)
+    "cap_nhat": None,    # thông tin bản mới trên GitHub (nếu có)
 }
 LOG = []
+LUONG_TOI_DA = 6
+NHAN = threading.local()   # .ten = nhãn ghi trước mỗi dòng nhật ký của luồng; .cur = link luồng đang tải
 
 
 class Tee:
     def __init__(self, goc):
         self.goc = goc
-        self.buf = ""
+        self.bufs = {}
+        self.khoa = threading.Lock()
 
     def write(self, s):
         try:
@@ -54,15 +59,22 @@ class Tee:
                 self.goc.write(s)
         except Exception:
             pass
-        self.buf += s
-        while "\n" in self.buf:
-            line, self.buf = self.buf.split("\n", 1)
-            line = line.rstrip("\r")
-            if "\r" in line:
-                line = line.split("\r")[-1]
-            if line.strip():
-                LOG.append(datetime.datetime.now().strftime("%H:%M:%S  ") + line)
-                del LOG[:-800]
+        # Mỗi luồng một bộ đệm riêng để các dòng nhật ký của nhiều link tải cùng lúc không trộn vào nhau
+        with self.khoa:
+            k = threading.get_ident()
+            buf = self.bufs.pop(k, "") + s
+            ten = getattr(NHAN, "ten", "")
+            while "\n" in buf:
+                line, buf = buf.split("\n", 1)
+                line = line.rstrip("\r")
+                if "\r" in line:
+                    line = line.split("\r")[-1]
+                if line.strip():
+                    LOG.append(datetime.datetime.now().strftime("%H:%M:%S  ")
+                               + (f"[{ten}] {line.strip()}" if ten else line))
+                    del LOG[:-800]
+            if buf:
+                self.bufs[k] = buf
 
     def flush(self):
         try:
@@ -227,7 +239,7 @@ def them_link(text, ten=""):
 def hook(d):
     if S["stopping"]:
         raise DungTai()
-    cur = S["cur"]
+    cur = getattr(NHAN, "cur", None)   # link mà CHÍNH luồng này đang tải
     if cur and d.get("status") == "downloading":
         tong = d.get("total_bytes") or d.get("total_bytes_estimate")
         if tong:
@@ -259,32 +271,58 @@ def tho(ids):
         if S["ffmpeg"] is None:
             S["ffmpeg"] = T.chuan_bi_ffmpeg() or ""
         ds = [i for i in S["items"] if i["id"] in ids]
-        for n, it in enumerate(ds, 1):
-            if S["stopping"]:
-                break
-            d = Path(it["dir"])
-            d.mkdir(parents=True, exist_ok=True)
-            co = T.da_tai(d, it["name"])
-            if co:
-                it.update(status="exists", file=co.name, error="", pct=100)
-                continue
-            print(f"[{n}/{len(ds)}] {it['sheet']} / {it['name']}  <-  {it['link']}")
-            it.update(status="running", pct=0, error="", method="")
-            S["cur"] = it
-            os.chdir(d)
-            tempfile.tempdir = str(d)
-            try:
-                f, cach = T.tai_mot({"link": it["link"], "name": it["name"]}, d, S["ffmpeg"] or None)
-                it.update(status="done", file=f.name, method=cach, pct=100)
-                print(f"    OK -> {f.name}  ({cach[:90]})")
-            except DungTai:
-                T.don_rac(d, it["name"])
-                it.update(status="pending", pct=0)
-                break
-            except Exception as e:
-                loi = T.rut_gon_loi(e)
-                it.update(status="error", error=loi, pct=0)
-                print(f"    LỖI: {loi}")
+        # Thư mục làm việc và thư mục tạm là của CẢ chương trình nên đặt một lần cho cả lượt
+        # (trước đây đổi theo từng link; nhiều luồng cùng đổi sẽ giẫm lên nhau).
+        goc = Path(S["outdir"] or thu_muc_mac_dinh())
+        goc.mkdir(parents=True, exist_ok=True)
+        os.chdir(goc)
+        tempfile.tempdir = str(goc)
+
+        hang = list(ds)            # các link chưa ai nhận
+        ban = set()                # các nền tảng đang có luồng tải
+        cv = threading.Condition()
+        dem = [0]
+
+        def nhan_viec():
+            """Lấy link kế tiếp mà nền tảng của nó đang rảnh. None = hết việc hoặc người dùng bấm Dừng."""
+            with cv:
+                while not S["stopping"]:
+                    if not hang:
+                        return None
+                    for it in hang:
+                        nt = T.nen_tang(it["link"])
+                        if nt not in ban:
+                            hang.remove(it)
+                            ban.add(nt)
+                            dem[0] += 1
+                            return it, nt, dem[0]
+                    cv.wait(0.5)   # mọi link còn lại đều thuộc nền tảng đang bận -> chờ
+                return None
+
+        def cong_nhan():
+            while True:
+                viec = nhan_viec()
+                if not viec:
+                    return
+                it, nt, so = viec
+                try:
+                    tai_mot_link(it, so, len(ds))
+                except BaseException as e:   # không để một luồng chết làm treo cả lượt
+                    it.update(status="error", error=f"Lỗi không mong muốn: {e}", pct=0)
+                finally:
+                    NHAN.ten, NHAN.cur = "", None
+                    with cv:
+                        ban.discard(nt)
+                        cv.notify_all()
+
+        n = max(1, min(int(S["luong"] or 1), LUONG_TOI_DA, len(ds)))
+        if n > 1:
+            print(f"Tải {n} link cùng lúc (mỗi nền tảng một link một lúc).")
+        cac_luong = [threading.Thread(target=cong_nhan, daemon=True) for _ in range(n)]
+        for t in cac_luong:
+            t.start()
+        for t in cac_luong:
+            t.join()
         ghi_bao_cao(ids)
         tim_file_nghi_sai()
     except Exception as e:
@@ -294,8 +332,163 @@ def tho(ids):
             if it["status"] == "running":
                 it["status"] = "pending"
         os.chdir(HERE)
+        T.xoa_ban_sao_cookie()
+        da_dung = S["stopping"]
         S.update(running=False, stopping=False, cur=None)
-        print("Đã dừng." if S["stopping"] else "Hoàn tất lượt tải.")
+        print("Đã dừng." if da_dung else "Hoàn tất lượt tải.")
+
+
+def tai_mot_link(it, so, tong):
+    """Tải một link (chạy trong một luồng công nhân)."""
+    d = Path(it["dir"])
+    d.mkdir(parents=True, exist_ok=True)
+    co = T.da_tai(d, it["name"])
+    if co:
+        it.update(status="exists", file=co.name, error="", pct=100)
+        return
+    print(f"[{so}/{tong}] {it['sheet']} / {it['name']}  <-  {it['link']}")
+    NHAN.ten = f"{it['sheet']} / {it['name']}"
+    NHAN.cur = it
+    it.update(status="running", pct=0, error="", method="")
+    try:
+        f, cach = T.tai_mot({"link": it["link"], "name": it["name"]}, d, S["ffmpeg"] or None)
+        it.update(status="done", file=f.name, method=cach, pct=100)
+        print(f"OK -> {f.name}  ({cach[:90]})")
+    except DungTai:
+        T.don_rac(d, it["name"])
+        it.update(status="pending", pct=0)
+    except Exception as e:
+        loi = T.rut_gon_loi(e)
+        it.update(status="error", error=loi, pct=0)
+        print(f"LỖI: {loi}")
+
+
+# ======================= CÀI ĐẶT LƯU LẠI GIỮA CÁC LẦN MỞ =======================
+def _file_cai_dat():
+    return T.TAM_DIR / "cai_dat.json"
+
+
+def nap_cai_dat():
+    try:
+        d = json.loads(_file_cai_dat().read_text(encoding="utf-8"))
+        S["luong"] = max(1, min(LUONG_TOI_DA, int(d.get("luong") or 3)))
+        T.MAX_HEIGHT = int(d.get("max_height") or 0) or None
+    except Exception:
+        pass
+
+
+def luu_cai_dat():
+    try:
+        T.TAM_DIR.mkdir(exist_ok=True)
+        _file_cai_dat().write_text(json.dumps({"luong": S["luong"], "max_height": T.MAX_HEIGHT or 0}),
+                                   encoding="utf-8")
+    except Exception:
+        pass
+
+
+# ======================= TỰ KIỂM TRA VÀ CẬP NHẬT BẢN MỚI =======================
+# Nguồn: kho GitHub công khai của tool. File phien_ban.json (nhánh main) ghi số phiên bản mới nhất,
+# thẻ (tag) chứa bản đó và mã băm SHA-256 của từng file. Tool CHỈ báo có bản mới; người dùng bấm mới cập nhật.
+KHO_CAP_NHAT = "johnphammanutd-design/tai-video-excel"
+FILE_DUOC_CAP_NHAT = {"tai_video.py", "giao_dien.py", "giao_dien.html", "HUONG_DAN.txt"}
+
+
+def _tai_tu_kho(nhanh, ten, toi_da=5_000_000):
+    import urllib.request
+
+    thu = os.environ.get("TAIVIDEO_UPDATE_URL")   # chỉ để chạy thử bằng máy chủ trên chính máy này
+    if thu:
+        if not thu.startswith(("http://127.0.0.1", "http://localhost")):
+            raise ValueError("TAIVIDEO_UPDATE_URL chỉ dùng được với máy chủ trên máy này.")
+        nguon = [f"{thu.rstrip('/')}/{nhanh}/"]
+    else:
+        nguon = [f"https://raw.githubusercontent.com/{KHO_CAP_NHAT}/{nhanh}/",
+                 f"https://cdn.jsdelivr.net/gh/{KHO_CAP_NHAT}@{nhanh}/"]
+    loi = None
+    for goc in nguon:
+        try:
+            req = urllib.request.Request(goc + ten, headers={"User-Agent": "TaiVideoExcel"})
+            with urllib.request.urlopen(req, timeout=20) as r:
+                du_lieu = r.read(toi_da + 1)
+            if len(du_lieu) > toi_da:
+                raise ValueError("file quá lớn")
+            return du_lieu
+        except Exception as e:
+            loi = e
+    raise loi
+
+
+def kiem_tra_ban_moi():
+    """Hỏi kho GitHub xem có bản mới hơn không. Không làm gì khác ngoài ghi nhận để giao diện báo."""
+    if os.environ.get("TAIVIDEO_NO_UPDATE") or (HERE / ".git").exists():
+        return   # thư mục của người phát triển: không tự ghi đè code đang sửa
+    try:
+        d = json.loads(_tai_tu_kho("main", "phien_ban.json", 100_000).decode("utf-8"))
+        moi, the, files = str(d["phien_ban"]), str(d["the"]), dict(d["files"])
+        if int(moi) <= int(T.PHIEN_BAN):
+            return
+        import re
+        if not re.fullmatch(r"v\d+", the) or not files or not set(files) <= FILE_DUOC_CAP_NHAT \
+                or not all(re.fullmatch(r"[0-9a-f]{64}", str(b)) for b in files.values()):
+            print("Thông tin bản mới trên GitHub không hợp lệ, bỏ qua.")
+            return
+        S["cap_nhat"] = {"moi": moi, "the": the, "files": files, "ghi_chu": str(d.get("ghi_chu") or "")[:400]}
+        print(f"Có bản mới: phiên bản {moi} (đang dùng {T.PHIEN_BAN}). Bấm 'Cập nhật' ở góc dưới bên trái.")
+    except Exception as e:
+        print(f"Không kiểm tra được bản mới ({str(e)[:80]}). Vẫn dùng bình thường.")
+
+
+def cap_nhat_tool():
+    """Tải bản mới, kiểm tra từng file rồi mới thay; giữ bản cũ để quay lại; mở lại tool."""
+    import hashlib
+
+    cn = S.get("cap_nhat")
+    if not cn:
+        raise ValueError("Không có bản mới.")
+    with LOCK:
+        if S["running"]:
+            raise ValueError("Đang tải, hãy dừng hoặc chờ xong rồi cập nhật.")
+    moi = {}
+    for ten, bam in cn["files"].items():
+        try:
+            du_lieu = _tai_tu_kho(cn["the"], ten)
+        except Exception as e:
+            raise ValueError(f"Không tải được bản mới ({ten}): {str(e)[:80]}. Thử lại sau.")
+        if hashlib.sha256(du_lieu).hexdigest() != bam:
+            raise ValueError(f"File {ten} tải về không khớp mã kiểm tra. Đã hủy cập nhật, tool giữ nguyên bản cũ.")
+        if ten.endswith(".py"):
+            try:
+                compile(du_lieu.decode("utf-8"), ten, "exec")
+            except Exception:
+                raise ValueError(f"File {ten} của bản mới bị lỗi. Đã hủy cập nhật, tool giữ nguyên bản cũ.")
+        moi[ten] = du_lieu
+    # Giữ bản đang dùng để quay lại khi cần
+    cu = T.TAM_DIR / f"ban_cu_{T.PHIEN_BAN}"
+    cu.mkdir(parents=True, exist_ok=True)
+    for ten in moi:
+        if (HERE / ten).exists():
+            shutil.copy2(HERE / ten, cu / ten)
+    da_thay = []
+    try:
+        for ten, du_lieu in moi.items():
+            tam = HERE / (ten + ".moi")
+            tam.write_bytes(du_lieu)
+            os.replace(tam, HERE / ten)
+            da_thay.append(ten)
+    except Exception as e:
+        for ten in da_thay:   # thay dở dang -> trả lại bản cũ
+            try:
+                shutil.copy2(cu / ten, HERE / ten)
+            except Exception:
+                pass
+        raise ValueError(f"Không ghi được file vào thư mục cài đặt ({str(e)[:80]}). Tool giữ nguyên bản cũ.")
+    print(f"Đã cập nhật lên phiên bản {cn['moi']}. Bản cũ lưu ở {cu}. Đang mở lại tool...")
+    env = {k: v for k, v in os.environ.items() if k != "TAIVIDEO_PORT"}
+    lenh = [sys.executable, str(HERE / "giao_dien.py")]
+    if S["excel"] and Path(S["excel"]).exists():
+        lenh.append(S["excel"])
+    subprocess.Popen(lenh, cwd=str(HERE), env=env, creationflags=AN_CUA_SO)
+    S["thoat"] = time.time()
 
 
 def bat_dau(che_do, ids=None):
@@ -365,6 +558,7 @@ def kiem_tra_moi_truong():
     S["ffmpeg"] = T.chuan_bi_ffmpeg() or ""
     env["ffmpeg"] = bool(S["ffmpeg"])
     S["env"] = env
+    kiem_tra_ban_moi()
     print("Sẵn sàng." if env["ytdlp"] else "THIẾU yt-dlp: không tải được. Kiểm tra kết nối mạng rồi mở lại.")
 
 
@@ -441,6 +635,9 @@ def trang_thai(log_tu=0):
             "count": dem, "cookies": ds_cookie(), "max_height": T.MAX_HEIGHT or 0,
             "log": LOG[-300:], "cur": S["cur"]["id"] if S["cur"] else None, "version": T.PHIEN_BAN,
             "suspect": sum(1 for i in S["items"] if i.get("suspect")),
+            "threads": S["luong"], "threads_max": LUONG_TOI_DA,
+            "update": ({"version": S["cap_nhat"]["moi"], "note": S["cap_nhat"]["ghi_chu"]} if S["cap_nhat"] else None),
+            "restarting": bool(S.get("thoat")),
         }
 
 
@@ -546,8 +743,13 @@ class H(BaseHTTPRequestHandler):
                 elif w == "guide":
                     mo(HERE / "HUONG_DAN.txt")
             elif a == "/api/settings":
-                h = int(d.get("max_height") or 0)
-                T.MAX_HEIGHT = h or None
+                if "max_height" in d:
+                    T.MAX_HEIGHT = int(d.get("max_height") or 0) or None
+                if "threads" in d:
+                    S["luong"] = max(1, min(LUONG_TOI_DA, int(d.get("threads") or 1)))
+                luu_cai_dat()
+            elif a == "/api/update":
+                cap_nhat_tool()
             else:
                 return self._gui(404, {"error": "not found"})
             self._gui(200, {"ok": True})
@@ -586,6 +788,7 @@ def main():
             sys.stderr = open(T.TAM_DIR / "loi.log", "a", encoding="utf-8")
         except Exception:
             pass
+    nap_cai_dat()
     port = int(os.environ.get("TAIVIDEO_PORT") or 0)
     if not port:
         s = socket.socket()
@@ -607,6 +810,9 @@ def main():
     try:
         while True:
             time.sleep(2)
+            if S.get("thoat") and time.time() - S["thoat"] > 3:
+                print("Đã cập nhật -> đóng bản cũ.")
+                break
             if S["running"]:
                 continue
             bye = S.get("bye", 0)

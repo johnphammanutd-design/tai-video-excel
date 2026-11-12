@@ -44,7 +44,7 @@ FALLBACK_LINK_COL = 3
 FALLBACK_NAME_COL = 4
 # ================================================================
 
-PHIEN_BAN = "10"
+PHIEN_BAN = "11"
 SCRIPT_DIR = Path(__file__).resolve().parent
 VIDEO_EXTS = {".mp4", ".mkv", ".webm", ".mov", ".m4v", ".flv", ".avi"}
 
@@ -211,6 +211,56 @@ _AUTO_COOKIES = {}
 TRANG_THAI_TD = "chưa kiểm tra"   # trạng thái dò bằng trình duyệt
 TAM_DIR = SCRIPT_DIR / "_tam"
 
+# ----- Chạy nhiều luồng (giao diện tải vài link cùng lúc) -----
+import threading  # noqa: E402
+
+_KHOA_COOKIE = threading.Lock()   # ghi/chép file cookie
+_KHOA_DUOI = threading.Lock()     # bật/tắt chế độ "cho phép đuôi file lạ" của yt-dlp
+_DEM_DUOI = [0, None]             # [số luồng đang cần chế độ đó, hàm gốc của yt-dlp]
+
+
+def nen_tang(url: str) -> str:
+    """Tên nền tảng của link. Giao diện chỉ tải MỘT link mỗi nền tảng tại một thời điểm,
+    vì các trang chặn theo địa chỉ mạng khi thấy nhiều yêu cầu dồn dập."""
+    from urllib.parse import urlsplit
+
+    try:
+        may = (urlsplit(url).hostname or "").lower()
+    except Exception:
+        may = ""
+    for ten, mau in (("douyin", r"douyin\.com$|iesdouyin\.com$"), ("tiktok", r"tiktok\.com$"),
+                     ("meta", r"facebook\.com$|fb\.watch$|fb\.com$|instagram\.com$|threads\.(net|com)$"),
+                     ("youtube", r"youtube\.com$|youtu\.be$|youtube-nocookie\.com$"),
+                     ("x", r"(^|\.)x\.com$|twitter\.com$|t\.co$"), ("reddit", r"reddit\.com$|redd\.it$"),
+                     ("pinterest", r"pinterest\.[\w.]+$|pin\.it$"), ("linkedin", r"linkedin\.com$")):
+        if re.search(mau, may):
+            return ten
+    phan = may.split(".")
+    # tên miền kiểu dantri.com.vn, bbc.co.uk: lấy 3 phần cuối để không gộp mọi trang .com.vn làm một
+    n = 3 if len(phan) >= 3 and len(phan[-1]) == 2 and phan[-2] in ("com", "co", "net", "org", "gov", "edu") else 2
+    return ".".join(phan[-n:]) or "khac"
+
+
+def _ban_sao_cookie(goc: str) -> str:
+    """Mỗi luồng dùng một bản sao file cookie riêng: yt-dlp GHI ĐÈ file cookie khi tải xong,
+    hai luồng dùng chung một file sẽ làm hỏng file."""
+    dst = TAM_DIR / f"ck_{threading.get_ident()}.txt"
+    try:
+        with _KHOA_COOKIE:
+            TAM_DIR.mkdir(exist_ok=True)
+            shutil.copyfile(goc, dst)
+        return str(dst)
+    except Exception:
+        return goc
+
+
+def xoa_ban_sao_cookie():
+    try:
+        for f in TAM_DIR.glob("ck_*.txt"):
+            f.unlink(missing_ok=True)
+    except Exception:
+        pass
+
 
 def _doc_dong_cookie(path: Path):
     try:
@@ -264,12 +314,13 @@ def luu_cookie_tu_dong(cookies):
             continue
     if not _AUTO_COOKIES:
         return
-    TAM_DIR.mkdir(exist_ok=True)
-    goc = _doc_dong_cookie(Path(COOKIE_GOP)) if COOKIE_GOP else []
-    dst = TAM_DIR / "cookies_auto.txt"
-    dst.write_text("# Netscape HTTP Cookie File\n" + "\n".join(list(_AUTO_COOKIES.values()) + goc) + "\n",
-                   encoding="utf-8")
-    COOKIE_AUTO = str(dst)
+    with _KHOA_COOKIE:
+        TAM_DIR.mkdir(exist_ok=True)
+        goc = _doc_dong_cookie(Path(COOKIE_GOP)) if COOKIE_GOP else []
+        dst = TAM_DIR / "cookies_auto.txt"
+        dst.write_text("# Netscape HTTP Cookie File\n" + "\n".join(list(_AUTO_COOKIES.values()) + goc) + "\n",
+                       encoding="utf-8")
+        COOKIE_AUTO = str(dst)
 
 
 def tao_options(outdir: Path, name: str, ffmpeg_dir):
@@ -1004,22 +1055,32 @@ def ytdlp_tai(url, outdir: Path, name, ffmpeg_dir, referer=None, ep_mp4=False, c
         opts["http_headers"] = {"Referer": referer, "User-Agent": ua or UA}
     if ep_mp4:
         opts["outtmpl"] = str(outdir / f"{name}.mp4")
-    goc = None
+    if opts.get("cookiefile"):
+        opts["cookiefile"] = _ban_sao_cookie(opts["cookiefile"])
+    da_bat = False
     if ep_mp4:
-        # Cho phép đuôi file lạ (vd. Snapchat), file vẫn được lưu là .mp4
+        # Cho phép đuôi file lạ (vd. Snapchat), file vẫn được lưu là .mp4.
+        # Đây là thay đổi chung cho cả chương trình nên phải đếm số luồng đang cần, luồng cuối mới trả lại hàm gốc.
         try:
             from yt_dlp.utils import _UnsafeExtensionError as U
-            goc = U.__dict__.get("sanitize_extension")
-            U.sanitize_extension = classmethod(lambda cls, ext, prepend=False: ext)
+            with _KHOA_DUOI:
+                if _DEM_DUOI[0] == 0:
+                    _DEM_DUOI[1] = U.__dict__.get("sanitize_extension")
+                    U.sanitize_extension = classmethod(lambda cls, ext, prepend=False: ext)
+                _DEM_DUOI[0] += 1
+                da_bat = True
         except Exception:
-            goc = None
+            pass
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             ydl.download([url])
     finally:
-        if goc is not None:
+        if da_bat:
             from yt_dlp.utils import _UnsafeExtensionError as U
-            U.sanitize_extension = goc
+            with _KHOA_DUOI:
+                _DEM_DUOI[0] -= 1
+                if _DEM_DUOI[0] == 0 and _DEM_DUOI[1] is not None:
+                    U.sanitize_extension = _DEM_DUOI[1]
     f = da_tai(outdir, name)
     if not f:
         raise RuntimeError("Không tìm thấy file sau khi tải")

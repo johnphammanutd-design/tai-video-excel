@@ -1,6 +1,6 @@
 ﻿; Bộ cài "Tải Video Excel" - biên dịch bằng Inno Setup 6 (DONG_GOI.bat tự gọi)
 #define TenApp "Tải Video Excel"
-#define PhienBan "1.10"
+#define PhienBan "1.11"
 
 [Setup]
 AppId={{6F3B5C0E-7B1D-4C55-9E21-0A4D8E2F71C3}

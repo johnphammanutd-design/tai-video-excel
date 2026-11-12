@@ -245,6 +245,9 @@ code{background:#eef2f0;border-radius:5px;padding:1px 6px;font-family:Consolas,m
           <div class="kv"><div><b>Chất lượng tối đa</b><small>Giảm xuống nếu muốn file nhẹ hơn.</small></div>
             <select id="mh" style="border:1px solid var(--line);border-radius:8px;padding:6px 10px;font:inherit">
               <option value="0">Cao nhất có thể</option><option value="2160">2160p (4K)</option><option value="1080">1080p</option><option value="720">720p</option><option value="480">480p</option></select></div>
+          <div class="kv"><div><b>Số link tải cùng lúc</b><small>Mỗi nền tảng (TikTok, Facebook…) vẫn chỉ tải một link một lúc để tránh bị chặn. Chọn 1 nếu máy yếu hoặc hay gặp lỗi.</small></div>
+            <select id="th" style="border:1px solid var(--line);border-radius:8px;padding:6px 10px;font:inherit">
+              <option value="1">1 (lần lượt)</option><option value="2">2</option><option value="3">3 (khuyên dùng)</option><option value="4">4</option><option value="5">5</option><option value="6">6</option></select></div>
           <div class="kv"><div><b>Thư mục lưu video</b><small id="set-out"></small></div><button class="btn" id="b-out2">Đổi thư mục</button></div>
         </div>
         <div class="card" id="envcard"></div>
@@ -301,6 +304,12 @@ function setF(f){FLT=f;$$("#flt button").forEach(b=>b.classList.toggle("on",b.da
 $$("#flt button").forEach(b=>b.onclick=()=>setF(b.dataset.f));
 $("#fq").oninput=$("#fsheet").onchange=draw;
 $("#mh").onchange=e=>act("/api/settings",{max_height:+e.target.value});
+$("#th").onchange=e=>act("/api/settings",{threads:+e.target.value});
+document.addEventListener("click",async e=>{
+  if(!e.target.closest("#b-update")) return;
+  if(ST&&ST.running){toast("Đang tải, hãy dừng hoặc chờ xong rồi cập nhật.");return}
+  toast("Đang tải bản mới…"); await act("/api/update");
+});
 
 const LBL={pending:"Chờ tải",running:"Đang tải",done:"Đã tải",exists:"Đã có sẵn",error:"Lỗi"};
 function grp(s){return s==="error"?"error":(s==="done"||s==="exists")?"ok":"todo"}
@@ -324,7 +333,10 @@ function render(){
   const nk=$("#nb-ck"); nk.style.display=ST.cookies.length?"":"none"; nk.textContent=ST.cookies.length;
   const e=ST.env, d=(ok,wait)=>`<span class="dot ${wait?"wait":ok?"ok":"bad"}"></span>`;
   $("#envbox").innerHTML=!e.ready?`${d(0,1)}Đang kiểm tra thành phần…`:
-    `<b style="color:var(--text)">Phiên bản ${esc(ST.version)}</b><br>${d(e.ytdlp)}yt-dlp ${esc(e.ytdlp||"thiếu")}<br>${d(e.browser==="ok")}Dò bằng trình duyệt<br>${d(e.curl)}Giả lập Chrome<br>${d(e.ffmpeg)}ffmpeg`;
+    `<b style="color:var(--text)">Phiên bản ${esc(ST.version)}</b><br>`+
+    (ST.restarting?`<span style="color:var(--ok);font-weight:600">Đã cập nhật. Cửa sổ mới đang mở, có thể đóng cửa sổ này.</span><br>`:
+     ST.update?`<span title="${esc(ST.update.note)}">Có bản ${esc(ST.update.version)} · <button class="link" id="b-update">Cập nhật</button></span><br>`:"")+
+    `${d(e.ytdlp)}yt-dlp ${esc(e.ytdlp||"thiếu")}<br>${d(e.browser==="ok")}Dò bằng trình duyệt<br>${d(e.curl)}Giả lập Chrome<br>${d(e.ffmpeg)}ffmpeg`;
   $("#envcard").innerHTML=`<b>Thành phần</b>`+(!e.ready?`<div class="kv"><div>Đang kiểm tra và cài thành phần còn thiếu…</div></div>`:[
     ["Python",e.python,true,""],
     ["yt-dlp (bộ tải chính)",e.ytdlp||"Chưa cài được",!!e.ytdlp,"Kiểm tra kết nối mạng rồi mở lại tool."],
@@ -344,11 +356,13 @@ function render(){
     $("#ld-sheets").innerHTML=Object.entries(sh).map(([k,v])=>`<span class="chip">${esc(k)} · ${v}</span>`).join("");
     $("#t-all").textContent=n;$("#t-ok").textContent=ok;$("#t-wait").textContent=todo;$("#t-err").textContent=er;
     $("#ld-out").textContent="‎"+ST.outdir; $("#pg").style.width=(n?(ok+er)*100/n:0)+"%";
-    const cur=ST.items.find(i=>i.id===ST.cur);
-    $("#ld-now").textContent=ST.stopping?"Đang dừng sau bước hiện tại…":cur?`Đang tải ${cur.sheet} / ${cur.name}`:"";
+    const run=ST.items.filter(i=>i.status==="running");
+    $("#ld-now").textContent=ST.stopping?"Đang dừng sau bước hiện tại…":run.length===1?`Đang tải ${run[0].sheet} / ${run[0].name}`:run.length?`Đang tải ${run.length} link cùng lúc: ${run.map(i=>i.name).join(", ")}`:"";
   }
   $("#set-out").textContent=ST.outdir;
   if(document.activeElement!==$("#mh")) $("#mh").value=ST.max_height;
+  if(document.activeElement!==$("#th")) $("#th").value=ST.threads;
+  if(ST.restarting&&!render.dong){render.dong=1;setTimeout(()=>{try{window.close()}catch(x){}},2500)}
   // nút
   const can=!ST.running&&(c.pending||er);
   ["#b-start","#b-start2"].forEach(s=>{$(s).style.display=ST.running?"none":"";$(s).disabled=!can;$(s).textContent=ok||er?"Tải tiếp":"Bắt đầu tải"});
