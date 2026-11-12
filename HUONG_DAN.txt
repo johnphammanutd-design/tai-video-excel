@@ -21,6 +21,10 @@ CÔNG CỤ TẢI VIDEO HÀNG LOẠT TỪ FILE EXCEL
      đóng cửa sổ giao diện thì tool tự thoát sau khoảng 1 phút.
    - Trang chủ: bấm "Chọn file Excel", hoặc dán link vào ô để tải nhanh.
    - Danh sách tải: xem trạng thái từng link, lọc link lỗi, "Thử lại link lỗi".
+   - Nút "Gán file" ở dòng link lỗi: dùng khi tool không tải được (vd. TikTok bắt đăng nhập)
+     nhưng bạn đã tải video đó bằng cách khác. Bấm "Gán file", chọn file vừa tải; tool chép
+     file vào đúng thư mục của sheet, đặt đúng tên theo Excel và chuyển sang H.264 nếu cần.
+     File bạn chọn được giữ nguyên ở chỗ cũ.
    - Đăng nhập (cookie): mở thư mục cookie và xem tool đã đọc được file nào.
    - Cài đặt: chất lượng, số link tải cùng lúc, thư mục lưu, tình trạng các thành phần.
    - Số link tải cùng lúc (mặc định 3): tool tải vài link song song cho nhanh, nhưng mỗi

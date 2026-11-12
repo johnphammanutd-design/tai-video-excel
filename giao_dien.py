@@ -623,6 +623,11 @@ def chon_bang_hop_thoai(loai):
             hop = ("$d=New-Object System.Windows.Forms.OpenFileDialog;$d.Title='Chon file Excel danh sach video';"
                    "$d.Filter='Excel (*.xlsx;*.xlsm)|*.xlsx;*.xlsm|Tat ca (*.*)|*.*';"
                    "if($d.ShowDialog($f) -eq 'OK'){$p=$d.FileName}")
+        elif loai == "video":
+            hop = ("$d=New-Object System.Windows.Forms.OpenFileDialog;$d.Title='Chon file video da tai tay';"
+                   "$d.Filter='Video (*.mp4;*.mov;*.mkv;*.webm;*.m4v;*.flv;*.avi)|*.mp4;*.mov;*.mkv;*.webm;*.m4v;*.flv;*.avi|Tat ca (*.*)|*.*';"
+                   "$dl=Join-Path $env:USERPROFILE 'Downloads';if(Test-Path $dl){$d.InitialDirectory=$dl};"
+                   "if($d.ShowDialog($f) -eq 'OK'){$p=$d.FileName}")
         else:
             hop = ("$d=New-Object System.Windows.Forms.FolderBrowserDialog;$d.Description='Chon thu muc luu video';"
                    "if($d.ShowDialog($f) -eq 'OK'){$p=$d.SelectedPath}")
@@ -642,6 +647,9 @@ def chon_bang_hop_thoai(loai):
     if loai == "excel":
         lenh = ("filedialog.askopenfilename(title='Chọn file Excel danh sách video',"
                 "filetypes=[('Excel','*.xlsx *.xlsm'),('Tất cả','*.*')])")
+    elif loai == "video":
+        lenh = ("filedialog.askopenfilename(title='Chọn file video đã tải tay',"
+                "filetypes=[('Video','*.mp4 *.mov *.mkv *.webm *.m4v *.flv *.avi'),('Tất cả','*.*')])")
     else:
         lenh = "filedialog.askdirectory(title='Chọn thư mục lưu video')"
     code = ("import sys,tkinter as tk\nfrom tkinter import filedialog\nr=tk.Tk();r.withdraw();r.attributes('-topmost',True)\n"
@@ -650,6 +658,43 @@ def chon_bang_hop_thoai(loai):
     if r.returncode != 0:
         raise ValueError("Không mở được hộp thoại chọn file. Hãy kéo thả file Excel vào biểu tượng của tool.")
     return r.stdout.decode("utf-8", "ignore").strip()
+
+
+def gan_file_tay(ma, nguon=None):
+    """Link tool không tải được (vd. bắt đăng nhập) nhưng người dùng đã tải tay bằng cách khác:
+    chép file đó vào đúng thư mục với đúng tên trong Excel, rồi chuyển H.264 nếu cần. File gốc được giữ nguyên."""
+    it = next((i for i in S["items"] if i["id"] == ma), None)
+    if not it:
+        raise ValueError("Không tìm thấy dòng này trong danh sách.")
+    if S["running"]:
+        raise ValueError("Đang tải, hãy đợi xong hoặc bấm Dừng rồi gán file.")
+    nguon = nguon or chon_bang_hop_thoai("video")
+    if not nguon:
+        return
+    nguon = Path(nguon)
+    if not nguon.is_file():
+        raise ValueError("Không đọc được file đã chọn.")
+    if nguon.suffix.lower() not in T.VIDEO_EXTS:
+        raise ValueError(f"File {nguon.name} không phải file video (mp4, mov, mkv, webm...).")
+    ff = S["ffmpeg"] or None
+    kt = T.kiem_tra_luong(nguon, ff)
+    if ff and kt is None:
+        raise ValueError(f"File {nguon.name} bị hỏng hoặc chưa tải xong (không đọc được), không gán.")
+    if kt is not None and not kt[0]:
+        raise ValueError(f"File {nguon.name} không có hình (chỉ có tiếng), không gán.")
+    d = Path(it["dir"])
+    d.mkdir(parents=True, exist_ok=True)
+    co = T.da_tai(d, it["name"])
+    if co and co.resolve() != nguon.resolve():
+        raise ValueError(f"Đã có file {co.name} trong thư mục lưu. Hãy xóa file đó trước nếu muốn thay.")
+    dich = d / (it["name"] + nguon.suffix.lower())
+    if dich.resolve() != nguon.resolve():
+        shutil.copy2(nguon, dich)
+    NHAN.ten = f"{it['sheet']} / {it['name']}"
+    print(f"Gán file tải tay: {nguon.name}  ->  {it['sheet']} / {dich.name}")
+    dich, ghi_chu = T.dam_bao_h264(dich, ff)
+    it.update(status="done", file=dich.name, error="", pct=100,
+              method="tải tay" + (f" [{ghi_chu}]" if ghi_chu else ""))
 
 
 def mo(path):
@@ -771,6 +816,8 @@ class H(BaseHTTPRequestHandler):
                     bat_dau("all")
             elif a == "/api/start":
                 bat_dau(d.get("mode", "all"), set(d["ids"]) if d.get("ids") else None)
+            elif a == "/api/assign":
+                gan_file_tay(d.get("id"))
             elif a == "/api/fix_suspect":
                 sua_file_nghi_sai()
             elif a == "/api/stop":

@@ -1,11 +1,11 @@
 {
-  "phien_ban": "13",
-  "the": "v13",
-  "ghi_chu": "Tự chuyển video HEVC/VP9/AV1 sang MP4 H.264 để dùng được trong Premiere và Windows",
+  "phien_ban": "14",
+  "the": "v14",
+  "ghi_chu": "Thêm nút Gán file ở dòng link lỗi: chọn file đã tải tay, tool tự đặt đúng tên, chép vào đúng thư mục và chuyển H.264",
   "files": {
-    "tai_video.py": "01f5a2ad76072d9350c0138d77b377d4dda272ccb7ed922e7fa8d1df10114cbf",
-    "giao_dien.py": "a2aa7c667ce60d69f34fa14c58dd85142f69b8eb23a9717ca07b95041a22c064",
-    "giao_dien.html": "0407dcfe41d084c3a047cbede61e0eeeb0fac3b367b7547f297431f39a1096ec",
-    "HUONG_DAN.txt": "fa7eb1ffb077f62dfb59cad20bffdf9259bea158db5c854345e26094475ace79"
+    "tai_video.py": "8bacd7fcba9cef4cef05763b9bade2d54b11e6c11db487c8434aac81246a2460",
+    "giao_dien.py": "fb6b56f1297a6629c1361fb2a9168f3df82a0848658c46916e200638c53c5076",
+    "giao_dien.html": "7e9b628750c2d1bba29fa66a2f428b8a5cbc888d4301a2ab4e8b7c767ceda6b2",
+    "HUONG_DAN.txt": "9ed9fd7f42d0bc58aab92b2f8cd941f5aea603fdd589cf577de396e82bf4f108"
   }
 }
