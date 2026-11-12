@@ -1,6 +1,8 @@
-﻿; Bộ cài "Tải Video Excel" - biên dịch bằng Inno Setup 6 (DONG_GOI.bat tự gọi)
-#define TenApp "Tải Video Excel"
-#define PhienBan "1.15"
+﻿; Bộ cài "HT CREATIVE AGENT" (tên cũ: "Tải Video Excel") - biên dịch bằng Inno Setup 6 (DONG_GOI.bat tự gọi)
+; AppId và thư mục cài GIỮ NGUYÊN như bản cũ để cài đè lên bản "Tải Video Excel" đang có trên máy.
+#define TenApp "HT CREATIVE AGENT"
+#define TenCu "Tải Video Excel"
+#define PhienBan "1.16"
 
 [Setup]
 AppId={{6F3B5C0E-7B1D-4C55-9E21-0A4D8E2F71C3}
@@ -9,12 +11,14 @@ AppVersion={#PhienBan}
 AppPublisher=HT Creative
 DefaultDirName={localappdata}\Programs\TaiVideoExcel
 DefaultGroupName={#TenApp}
+; Không dùng lại tên nhóm Start Menu của bản cũ (nếu không, biểu tượng mới vẫn nằm trong nhóm tên cũ)
+UsePreviousGroup=no
 DisableProgramGroupPage=yes
 ; Cài cho từng người dùng, KHÔNG cần quyền quản trị.
 ; Thư mục cài phải ghi được để tool tự cập nhật yt-dlp và lưu cookie.
 PrivilegesRequired=lowest
 OutputDir=.
-OutputBaseFilename=TaiVideo_Setup
+OutputBaseFilename=HTCreativeAgent_Setup
 SetupIconFile=..\icon.ico
 UninstallDisplayIcon={app}\app\icon.ico
 Compression=lzma2/max
@@ -27,6 +31,12 @@ CloseApplications=no
 
 [Tasks]
 Name: "desktopicon"; Description: "Tạo biểu tượng trên Desktop"; GroupDescription: "Biểu tượng:"
+
+[InstallDelete]
+; Xóa biểu tượng mang tên cũ khi cài đè lên bản "Tải Video Excel"
+Type: files; Name: "{userdesktop}\{#TenCu}.lnk"
+Type: filesandordirs; Name: "{userprograms}\{#TenCu}"
+Type: files; Name: "{app}\Mo Tai Video.bat"
 
 [Files]
 Source: "build\TaiVideo\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs

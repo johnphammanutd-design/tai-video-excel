@@ -1,11 +1,11 @@
 {
-  "phien_ban": "15",
-  "the": "v15",
-  "ghi_chu": "Tải được video TikTok bắt đăng nhập bằng cách nhờ dịch vụ trung gian tikwm.com lấy hộ (tắt được trong Cài đặt)",
+  "phien_ban": "16",
+  "the": "v16",
+  "ghi_chu": "Đổi tên thành HT CREATIVE AGENT với logo mới; thêm nút sửa link trong danh sách tải; sửa lỗi đổi thư mục lưu không nhận; tải được video Corriere và video X bị chặn với khách",
   "files": {
-    "tai_video.py": "e3fda2f94bb18e4fa1692bb991ceafac36c0fb739dd97bdfeedc3db5c22c4a73",
-    "giao_dien.py": "a3d8d083f7b87ad4f24026375ecff2b7788709c09fa700007f22e85425996109",
-    "giao_dien.html": "17646b61db2704ad0ade6436cc97149b047077c30b35e79830ade2d85b2f9087",
-    "HUONG_DAN.txt": "f1fb4d723ce2042e9e0cd05cc2eb251aa788ba958d329e330a7069e44ddc6433"
+    "tai_video.py": "f2508b2571cfa40d773a46b86c84b4c1d9abc7cebd3f5d72a1054ac304b85198",
+    "giao_dien.py": "f30dd76c3bc60944c8e55e829d5df4907c4b6cbbb8bde748c12001a873f5708a",
+    "giao_dien.html": "b83f2c189c4ec7516003837b065ff3ecc4a8ec64a8f703a4c90dd7bfb3826fb0",
+    "HUONG_DAN.txt": "3d4b1f35621b75f10fcda347070dc9d76d548817689c6c46685932f67e542981"
   }
 }

@@ -9,6 +9,7 @@ import csv
 import datetime
 import json
 import os
+import re
 import secrets
 import shutil
 import socket
@@ -88,6 +89,31 @@ def thu_muc_mac_dinh():
     return str(Path.home() / "Downloads" / "TaiVideo")
 
 
+def tinh_thu_muc_luu():
+    """Thư mục lưu của danh sách hiện tại.
+    - Người dùng ĐÃ chọn thư mục (Cài đặt / nút Đổi): lưu vào đó, mỗi file Excel một thư mục con <tên Excel>_video
+      (để video trùng tên của hai file Excel khác nhau không đè lên nhau). Lựa chọn được nhớ giữa các lần mở tool.
+    - Chưa chọn: cạnh file Excel (<tên Excel>_video), hoặc Downloads\\TaiVideo khi không biết file Excel nằm đâu."""
+    chon = S.get("thu_muc_chon") or ""
+    if S["excel"]:
+        p = Path(S["excel"])
+        goc = chon or (str(p.parent) if p.is_absolute() else thu_muc_mac_dinh())
+        return str(Path(goc) / (p.stem + "_video"))
+    return chon or thu_muc_mac_dinh()
+
+
+def dat_thu_muc_luu(duong_dan):
+    """Người dùng chọn thư mục lưu ("" = quay về mặc định). Áp dụng ngay cho danh sách đang mở và nhớ cho lần sau."""
+    with LOCK:
+        if S["running"]:
+            raise ValueError("Đang tải, hãy dừng trước khi đổi thư mục.")
+        S["thu_muc_chon"] = str(duong_dan or "")
+        S["outdir"] = tinh_thu_muc_luu()
+        cap_nhat_thu_muc()
+    luu_cai_dat()
+    print(f"Thư mục lưu video: {S['outdir']}")
+
+
 def thu_muc_item(sheet):
     base = Path(S["outdir"] or thu_muc_mac_dinh())
     sheets = {i["sheet"] for i in S["items"]} | {sheet}
@@ -160,7 +186,7 @@ def nap_file_tai_len(ten, du_lieu):
     with LOCK:
         # Không biết thư mục gốc của file -> lưu video vào Downloads\TaiVideo\<tên file>_video
         S["excel"] = ten
-        S["outdir"] = str(Path(thu_muc_mac_dinh()) / (Path(ten).stem + "_video"))
+        S["outdir"] = tinh_thu_muc_luu()
         cap_nhat_thu_muc()
 
 
@@ -183,9 +209,75 @@ def _cap_nhat_thu_muc():
                 it.update(status="pending", file="")
 
 
+# ======================= SỬA LINK NGAY TRONG DANH SÁCH =======================
+# Tool KHÔNG ghi vào file Excel của người dùng. Link đã sửa được nhớ trong _tam/link_da_sua.json để lần sau
+# mở lại đúng file Excel đó vẫn dùng link mới (chỉ khi ô trong Excel vẫn còn là link cũ).
+def _file_link_sua():
+    return T.TAM_DIR / "link_da_sua.json"
+
+
+def _doc_link_sua():
+    try:
+        d = json.loads(_file_link_sua().read_text(encoding="utf-8"))
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
+def _khoa_link_sua(it):
+    return f"{Path(S['excel']).name}|{it['sheet']}|{it['row']}|{it['name']}" if S["excel"] and it["row"] else ""
+
+
+def sua_link(ma, link_moi):
+    """Đổi link của một dòng. File đã tải từ link cũ (nếu có) được chuyển vào thư mục con _link_cu, không xóa."""
+    link_moi = "".join(str(link_moi or "").split())
+    if link_moi and not link_moi.lower().startswith("http"):
+        link_moi = "https://" + link_moi
+    if not re.match(r"https?://[^/\s]+\.[^/\s]+", link_moi, re.I):
+        raise ValueError("Link không hợp lệ. Hãy dán đầy đủ địa chỉ trang có video (bắt đầu bằng http).")
+    with LOCK:
+        it = next((i for i in S["items"] if i["id"] == ma), None)
+        if not it:
+            raise ValueError("Không tìm thấy dòng này trong danh sách.")
+        if S["running"]:
+            raise ValueError("Đang tải, hãy đợi xong hoặc bấm Dừng rồi sửa link.")
+        if link_moi == it["link"]:
+            return False
+        if it["file"]:
+            cu = Path(it["dir"]) / it["file"]
+            if cu.is_file():
+                kho = cu.parent / "_link_cu"
+                kho.mkdir(exist_ok=True)
+                dich = kho / cu.name
+                n = 1
+                while dich.exists():
+                    n += 1
+                    dich = kho / f"{cu.stem} ({n}){cu.suffix}"
+                cu.replace(dich)
+                print(f"File tải từ link cũ đã chuyển vào: {dich}")
+        goc = it.get("link_goc") or it["link"]
+        print(f"Sửa link {it['sheet']} / {it['name']}: {it['link']}  ->  {link_moi}")
+        it.update(link=link_moi, link_goc="" if link_moi == goc else goc, status="pending", pct=0, method="",
+                  error="", file="", suspect="")
+        khoa = _khoa_link_sua(it)
+        if khoa:
+            d = _doc_link_sua()
+            if it["link_goc"]:
+                d[khoa] = {"cu": goc, "moi": link_moi}
+            else:
+                d.pop(khoa, None)
+            try:
+                T.TAM_DIR.mkdir(exist_ok=True)
+                _file_link_sua().write_text(json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8")
+            except Exception:
+                pass
+        tim_file_nghi_sai()
+    return True
+
+
 def them_item(sheet, row, name, link):
     it = {"id": S["next_id"], "sheet": sheet, "row": row, "name": name, "link": link, "status": "pending",
-          "pct": 0, "method": "", "error": "", "file": "", "dir": "", "suspect": ""}
+          "pct": 0, "method": "", "error": "", "file": "", "dir": "", "suspect": "", "link_goc": ""}
     S["next_id"] += 1
     S["items"].append(it)
     return it
@@ -205,12 +297,19 @@ def nap_excel(path):
             raise ValueError("Đang tải, hãy dừng trước khi mở file khác.")
         S["items"] = [i for i in S["items"] if i["sheet"] == "Link lẻ"]
         S["excel"] = str(p.resolve())
-        S["outdir"] = str(p.resolve().parent / (p.stem + "_video"))
+        S["outdir"] = tinh_thu_muc_luu()
+        da_sua, n_sua = _doc_link_sua(), 0
         for ten, items in sheets:
             for it in items:
-                them_item(ten, it["row"], it["name"], it["link"])
+                moi = them_item(ten, it["row"], it["name"], it["link"])
+                s = da_sua.get(_khoa_link_sua(moi))
+                # chỉ dùng lại link đã sửa khi ô trong Excel vẫn còn là link cũ (người dùng chưa tự sửa trong sheet)
+                if isinstance(s, dict) and s.get("cu") == moi["link"] and s.get("moi"):
+                    moi.update(link=s["moi"], link_goc=s["cu"])
+                    n_sua += 1
         cap_nhat_thu_muc()
-    print(f"Đã mở {p.name}: {sum(len(i) for _, i in sheets)} link trong {len(sheets)} sheet.")
+    print(f"Đã mở {p.name}: {sum(len(i) for _, i in sheets)} link trong {len(sheets)} sheet."
+          + (f" Dùng lại {n_sua} link bạn đã sửa trong tool." if n_sua else ""))
 
 
 def them_link(text, ten=""):
@@ -231,7 +330,7 @@ def them_link(text, ten=""):
             da_co.add(name)
             them_item("Link lẻ", 0, name, u)
         if not S["outdir"]:
-            S["outdir"] = thu_muc_mac_dinh()
+            S["outdir"] = tinh_thu_muc_luu()
         cap_nhat_thu_muc()
     return len(links)
 
@@ -382,6 +481,9 @@ def nap_cai_dat():
         T.MAX_HEIGHT = int(d.get("max_height") or 0) or None
         T.CHUYEN_H264 = bool(d.get("h264", True))
         T.TIKTOK_TRUNG_GIAN = bool(d.get("tiktok_trung_gian", True))
+        S["thu_muc_chon"] = str(d.get("thu_muc_luu") or "")
+        if not S["items"]:
+            S["outdir"] = tinh_thu_muc_luu() if S["thu_muc_chon"] else ""
         S["proxy_text"] = str(d.get("proxy") or "")
         try:
             T.dat_proxy(S["proxy_text"], str(d.get("proxy_che_do") or "tat"))
@@ -397,7 +499,7 @@ def luu_cai_dat():
         T.TAM_DIR.mkdir(exist_ok=True)
         _file_cai_dat().write_text(json.dumps({
             "luong": S["luong"], "max_height": T.MAX_HEIGHT or 0, "h264": T.CHUYEN_H264,
-            "tiktok_trung_gian": T.TIKTOK_TRUNG_GIAN,
+            "tiktok_trung_gian": T.TIKTOK_TRUNG_GIAN, "thu_muc_luu": S.get("thu_muc_chon", ""),
             "proxy": S.get("proxy_text", ""), "proxy_che_do": T.PROXY_CHE_DO}), encoding="utf-8")
     except Exception:
         pass
@@ -734,7 +836,7 @@ def trang_thai(log_tu=0):
             "items": S["items"], "excel": S["excel"], "outdir": S["outdir"] or thu_muc_mac_dinh(),
             "running": S["running"], "stopping": S["stopping"], "env": S["env"], "report": S["report"],
             "count": dem, "cookies": ds_cookie(), "max_height": T.MAX_HEIGHT or 0, "h264": T.CHUYEN_H264,
-            "tiktok_mid": T.TIKTOK_TRUNG_GIAN,
+            "tiktok_mid": T.TIKTOK_TRUNG_GIAN, "outdir_base": S.get("thu_muc_chon", ""),
             "log": LOG[-300:], "cur": S["cur"]["id"] if S["cur"] else None, "version": T.PHIEN_BAN,
             "suspect": sum(1 for i in S["items"] if i.get("suspect")),
             "threads": S["luong"], "threads_max": LUONG_TOI_DA,
@@ -806,19 +908,22 @@ class H(BaseHTTPRequestHandler):
             elif a == "/api/load":
                 nap_excel(d.get("path", ""))
             elif a == "/api/pick_outdir":
+                if S["running"]:
+                    raise ValueError("Đang tải, hãy dừng trước khi đổi thư mục.")
                 p = chon_bang_hop_thoai("dir")
                 if p:
-                    with LOCK:
-                        if S["running"]:
-                            raise ValueError("Đang tải, hãy dừng trước khi đổi thư mục.")
-                        S["outdir"] = p
-                        cap_nhat_thu_muc()
+                    dat_thu_muc_luu(p)
+            elif a == "/api/reset_outdir":
+                dat_thu_muc_luu("")
             elif a == "/api/add_links":
                 them_link(d.get("links", ""), d.get("name", ""))
                 if d.get("start") and not S["running"]:
                     bat_dau("all")
             elif a == "/api/start":
                 bat_dau(d.get("mode", "all"), set(d["ids"]) if d.get("ids") else None)
+            elif a == "/api/edit_link":
+                if sua_link(d.get("id"), d.get("link", "")) and d.get("start"):
+                    bat_dau("all", {d.get("id")})
             elif a == "/api/assign":
                 gan_file_tay(d.get("id"))
             elif a == "/api/fix_suspect":
@@ -832,6 +937,7 @@ class H(BaseHTTPRequestHandler):
                     if S["running"]:
                         raise ValueError("Đang tải, hãy dừng trước.")
                     S.update(items=[], excel="", report="")
+                    S["outdir"] = tinh_thu_muc_luu() if S.get("thu_muc_chon") else ""
             elif a == "/api/open":
                 w = d.get("what")
                 if w == "outdir":

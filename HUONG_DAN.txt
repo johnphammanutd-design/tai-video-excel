@@ -1,5 +1,6 @@
-CÔNG CỤ TẢI VIDEO HÀNG LOẠT TỪ FILE EXCEL
-=========================================
+HT CREATIVE AGENT - CÔNG CỤ TẢI VIDEO HÀNG LOẠT TỪ FILE EXCEL
+=============================================================
+(tên cũ: Tải Video Excel)
 
 1. CÀI ĐẶT (làm 1 lần)
    - Cài Python: https://www.python.org/downloads/
@@ -21,12 +22,21 @@ CÔNG CỤ TẢI VIDEO HÀNG LOẠT TỪ FILE EXCEL
      đóng cửa sổ giao diện thì tool tự thoát sau khoảng 1 phút.
    - Trang chủ: bấm "Chọn file Excel", hoặc dán link vào ô để tải nhanh.
    - Danh sách tải: xem trạng thái từng link, lọc link lỗi, "Thử lại link lỗi".
+   - Nút bút chì cạnh mỗi link (Sửa link): dùng khi link trong sheet lấy sai (link nhóm, link
+     trang chủ, bài không có video...). Dán link đúng rồi bấm "Lưu và tải". Tool KHÔNG sửa
+     file Excel của bạn; link mới được nhớ trên máy, lần sau mở lại đúng file Excel đó vẫn
+     dùng link mới (trừ khi bạn đã tự sửa ô đó trong Excel). Dòng đã sửa có nhãn "đã sửa".
+     Nếu dòng đó đã có file tải từ link cũ, file được chuyển vào thư mục con _link_cu.
    - Nút "Gán file" ở dòng link lỗi: dùng khi tool không tải được (vd. TikTok bắt đăng nhập)
      nhưng bạn đã tải video đó bằng cách khác. Bấm "Gán file", chọn file vừa tải; tool chép
      file vào đúng thư mục của sheet, đặt đúng tên theo Excel và chuyển sang H.264 nếu cần.
      File bạn chọn được giữ nguyên ở chỗ cũ.
    - Đăng nhập (cookie): mở thư mục cookie và xem tool đã đọc được file nào.
    - Cài đặt: chất lượng, số link tải cùng lúc, thư mục lưu, tình trạng các thành phần.
+   - Thư mục lưu video: mặc định là thư mục "<tên file Excel>_video" nằm cạnh file Excel.
+     Bấm "Đổi" (Trang chủ) hoặc "Đổi thư mục" (Cài đặt) để chọn nơi khác: từ đó video của
+     mọi file Excel đều lưu vào thư mục bạn chọn, mỗi file Excel một thư mục con mang tên
+     file đó. Lựa chọn được nhớ cho các lần mở sau. Bấm "Về mặc định" để bỏ lựa chọn.
    - Số link tải cùng lúc (mặc định 3): tool tải vài link song song cho nhanh, nhưng mỗi
      nền tảng (TikTok, Facebook, Douyin...) vẫn chỉ tải một link một lúc để không bị chặn.
      Máy yếu hoặc hay gặp lỗi thì chọn 1.
@@ -40,6 +50,8 @@ CÔNG CỤ TẢI VIDEO HÀNG LOẠT TỪ FILE EXCEL
      trung gian tikwm.com để lấy hộ (giống cách các trang như snaptik làm), rồi tải video về.
      Tool chỉ gửi địa chỉ video, không gửi tên file, danh sách hay thông tin nào khác. Không
      muốn gửi link cho bên thứ ba thì tắt mục này trong Cài đặt.
+     Cùng công tắc đó áp dụng cho X/Twitter: tweet mà X không cho khách xem video thì tool
+     hỏi dịch vụ FxTwitter (api.fxtwitter.com), chỉ gửi mã tweet.
    - Proxy HTTP (Cài đặt > Proxy, không bắt buộc): mỗi dòng một proxy, dạng
      domain:port:user:pass. Có 3 chế độ: Tắt; "Chỉ khi bị chặn" (tải thẳng trước, link
      nào lỗi do mạng hoặc bị chặn địa chỉ mới đi qua proxy - đỡ tốn dung lượng proxy);
@@ -52,7 +64,8 @@ CÔNG CỤ TẢI VIDEO HÀNG LOẠT TỪ FILE EXCEL
      nhật khi bạn chưa bấm.
    Giao diện chỉ chạy trên máy bạn (địa chỉ 127.0.0.1). Tool không gửi danh sách link hay
    file của bạn đi đâu; nó chỉ tải video, cập nhật yt-dlp và hỏi số phiên bản mới.
-   Ngoại lệ duy nhất: link TikTok bắt đăng nhập được gửi cho tikwm.com (xem mục trên, tắt được).
+   Ngoại lệ duy nhất: link TikTok và X bắt đăng nhập được gửi cho dịch vụ trung gian
+   (tikwm.com, FxTwitter - xem mục trên, tắt được).
 
 3b. CHẠY BẰNG DÒNG LỆNH (cách cũ, vẫn dùng được)
    - Cách 1: Kéo thả file Excel vào CHAY_TOOL.bat.

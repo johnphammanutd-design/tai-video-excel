@@ -1,4 +1,4 @@
-# Dong goi "Tai Video Excel" thanh bo cai Windows (TaiVideo_Setup.exe) va ban portable (.zip).
+# Dong goi "HT CREATIVE AGENT" thanh bo cai Windows (HTCreativeAgent_Setup.exe) va ban portable (.zip).
 # Chay bang DONG_GOI.bat. May dong goi can co mang; KHONG can cai Python.
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -47,7 +47,7 @@ foreach ($f in 'tai_video.py', 'giao_dien.py', 'giao_dien.html', 'HUONG_DAN.txt'
     Copy-Item (Join-Path $Src $f) $AppDir
 }
 New-Item -ItemType Directory -Force -Path (Join-Path $AppDir 'cookies') | Out-Null
-Set-Content -Path (Join-Path $AppRoot 'Mo Tai Video.bat') -Encoding ASCII -Value @(
+Set-Content -Path (Join-Path $AppRoot 'Mo HT Creative Agent.bat') -Encoding ASCII -Value @(
     '@echo off', 'cd /d "%~dp0app"', 'start "" "%~dp0python\pythonw.exe" "%~dp0app\giao_dien.py" %*')
 # Thu nhanh: tool khoi dong duoc trong ban dong goi
 $env:TAIVIDEO_NO_BROWSER = '1'; $env:TAIVIDEO_NO_UPDATE = '1'
@@ -57,7 +57,7 @@ Remove-Item Env:TAIVIDEO_NO_BROWSER, Env:TAIVIDEO_NO_UPDATE
 Get-ChildItem $AppRoot -Recurse -Directory -Filter '__pycache__' | Remove-Item -Recurse -Force
 
 Buoc "6/6 Tao bo cai"
-$portable = Join-Path $Here 'TaiVideo_Portable.zip'
+$portable = Join-Path $Here 'HTCreativeAgent_Portable.zip'
 if (Test-Path $portable) { Remove-Item $portable }
 Compress-Archive -Path $AppRoot -DestinationPath $portable
 Write-Host "  Ban portable: $portable"
@@ -79,9 +79,9 @@ if ($iscc) {
     & $iscc /Q (Join-Path $Here 'TaiVideo.iss')
     if ($LASTEXITCODE -ne 0) { throw "Inno Setup bao loi khi tao bo cai" }
     Write-Host ""
-    Write-Host "XONG. Bo cai: $(Join-Path $Here 'TaiVideo_Setup.exe')" -ForegroundColor Green
+    Write-Host "XONG. Bo cai: $(Join-Path $Here 'HTCreativeAgent_Setup.exe')" -ForegroundColor Green
 } else {
     Write-Host ""
-    Write-Host "Da tao ban portable, CHUA tao duoc TaiVideo_Setup.exe vi may chua co Inno Setup." -ForegroundColor Yellow
+    Write-Host "Da tao ban portable, CHUA tao duoc HTCreativeAgent_Setup.exe vi may chua co Inno Setup." -ForegroundColor Yellow
     Write-Host "Cai Inno Setup (mien phi) tai https://jrsoftware.org/isdl.php roi chay lai DONG_GOI.bat."
 }

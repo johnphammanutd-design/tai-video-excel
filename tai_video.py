@@ -39,7 +39,8 @@ MAX_HEIGHT = None
 # Tự chuyển video về MP4 mã H.264 (Premiere và Windows đọc được ngay). False = giữ nguyên file tải về.
 CHUYEN_H264 = True
 
-# TikTok bắt đăng nhập mới xem được: nhờ dịch vụ trung gian tikwm.com lấy hộ (chỉ gửi địa chỉ video đó đi).
+# Trang bắt đăng nhập mới xem được video: nhờ dịch vụ trung gian lấy hộ, chỉ gửi địa chỉ/mã bài đăng đó đi.
+#   TikTok -> tikwm.com ; X/Twitter -> FxTwitter (api.fxtwitter.com)
 # False = không bao giờ gửi link cho bên thứ ba; các link này sẽ báo lỗi "cần đăng nhập".
 TIKTOK_TRUNG_GIAN = True
 
@@ -51,7 +52,7 @@ FALLBACK_LINK_COL = 3
 FALLBACK_NAME_COL = 4
 # ================================================================
 
-PHIEN_BAN = "15"
+PHIEN_BAN = "16"
 SCRIPT_DIR = Path(__file__).resolve().parent
 VIDEO_EXTS = {".mp4", ".mkv", ".webm", ".mov", ".m4v", ".flv", ".avi"}
 
@@ -687,6 +688,16 @@ def trich_link_video(html: str, base: str):
             if HOST_NHUNG.search(u):
                 nhom_iframe.append(u)
 
+    # 3c. Trang phát video bằng trình phát Dailymotion và ghi mã video trong dữ liệu trang chứ không có iframe sẵn
+    #     (vd. báo của nhóm RCS: video.corriere.it). "privateId" đứng trước vì video của báo thường để riêng tư,
+    #     chỉ mở được bằng mã riêng mà chính trang đó dùng để phát.
+    if "dailymotion" in h.lower():
+        for khoa in ("privateId", "dmId"):
+            for ma in re.findall(r'"%s"\s*:\s*"([A-Za-z0-9]{6,24})"' % khoa, h):
+                nhom_iframe.append("https://www.dailymotion.com/video/" + ma)
+        for ma in re.findall(r"""geo\.dailymotion\.com/player/\w+\.html\?(?:[^"'\s<>]*&)?video=([A-Za-z0-9]{6,24})""", h):
+            nhom_iframe.append("https://www.dailymotion.com/video/" + ma)
+
     # 4. Quét toàn bộ trang tìm đường dẫn video
     nhom_regex += re.findall(
         r"""((?:https?:)?//[^\s"'<>()\\]+?\.""" + DUOI_VIDEO + r"""(?:\?[^\s"'<>()\\]*)?)(?=["'\s<>)\\]|$)""",
@@ -999,6 +1010,61 @@ def tai_tiktok_trung_gian(url: str, outdir: Path, name: str, ffmpeg_dir):
     raise RuntimeError("có link nhưng không tải được: " + "; ".join(dict.fromkeys(loi)) if loi else "không có link video")
 
 
+def tai_x_trung_gian(url: str, outdir: Path, name: str, ffmpeg_dir):
+    """X/Twitter không cho khách xem video của tweet (yt-dlp báo "No video could be found" hoặc đòi đăng nhập):
+    hỏi dịch vụ mã nguồn mở FxTwitter (api.fxtwitter.com, cổng công khai có tài liệu). CHỈ gửi mã tweet.
+    Tweet không có video nhưng trích dẫn một tweet có video thì lấy video của tweet được trích dẫn."""
+    import json
+    import urllib.request
+
+    m = re.search(r"(?:twitter|x)\.com/[^/]+/status(?:es)?/(\d+)", url, re.I)
+    if not m:
+        raise RuntimeError("không đọc được mã tweet từ link")
+    req = urllib.request.Request(
+        "https://api.fxtwitter.com/2/status/" + m.group(1),
+        headers={"User-Agent": f"TaiVideoExcel/{PHIEN_BAN} (bot; video downloader)", "Accept": "application/json"})
+    with _mo_url(req, 40) as r:
+        d = json.loads(r.read().decode("utf-8", "ignore"))
+    tw = d.get("status") if isinstance(d, dict) else None
+    if not isinstance(tw, dict):
+        raise RuntimeError(str((d or {}).get("message") or "không có dữ liệu")[:120])
+    nguon = ""
+    video = ((tw.get("media") or {}).get("videos") or [])
+    if not video and isinstance(tw.get("quote"), dict):
+        video = ((tw["quote"].get("media") or {}).get("videos") or [])
+        nguon = " - video của tweet được trích dẫn"
+    if not video:
+        raise RuntimeError("tweet này không có video")
+    v = video[0]
+
+    def cao(u):
+        k = re.search(r"/(\d+)x(\d+)/", u or "")
+        return min(int(k.group(1)), int(k.group(2))) if k else 0
+
+    ds = [f for f in (v.get("formats") or []) if f.get("container") == "mp4" and f.get("url")]
+    if MAX_HEIGHT and any(0 < cao(f["url"]) <= MAX_HEIGHT for f in ds):
+        ds = [f for f in ds if 0 < cao(f["url"]) <= MAX_HEIGHT]
+    ds.sort(key=lambda f: int(f.get("bitrate") or 0), reverse=True)
+    ung_vien = list(dict.fromkeys([f["url"] for f in ds] + ([v["url"]] if str(v.get("url") or "").split("?")[0].endswith(".mp4") else [])))
+    dich = outdir / f"{name}.mp4"
+    loi = []
+    for u in ung_vien[:3]:
+        don_rac(outdir, name)
+        try:
+            tai_truc_tiep(u, dich, UA, "https://x.com/")
+            kt = kiem_tra_luong(dich, ffmpeg_dir)
+            if kt and not kt[0]:
+                raise RuntimeError("file không có hình")
+            dai = float(v.get("duration") or 0)
+            if kt and dai > 2 and abs(kt[2] - dai) > max(3.0, dai * 0.1):
+                raise RuntimeError(f"thời lượng lệch ({kt[2]:.0f}s so với {dai:.0f}s)")
+            return dich, "dịch vụ trung gian FxTwitter (X không cho khách xem)" + nguon
+        except Exception as e:
+            dich.unlink(missing_ok=True)
+            loi.append(" ".join(str(e).split())[:80])
+    raise RuntimeError("có link nhưng không tải được: " + "; ".join(dict.fromkeys(loi)) if loi else "không có bản mp4")
+
+
 def tai_html(url: str, ua: str = None) -> str:
     import urllib.request
 
@@ -1067,7 +1133,7 @@ def dam_bao_goi():
     import importlib
     import subprocess
 
-    print(f"Tool phiên bản {PHIEN_BAN} | Python {sys.version.split()[0]}")
+    print(f"HT CREATIVE AGENT phiên bản {PHIEN_BAN} | Python {sys.version.split()[0]}")
     for mod, goi in (("yt_dlp", "yt-dlp[default]"), ("openpyxl", "openpyxl"), ("imageio_ffmpeg", "imageio-ffmpeg"),
                      ("curl_cffi", "yt-dlp[default,curl-cffi]"), ("playwright", "playwright")):
         try:
@@ -1438,6 +1504,17 @@ def _tai_mot(item, outdir: Path, ffmpeg_dir):
             don_rac(outdir, name)
             ly_do = " ".join(str(e).split())[:140]
             raise RuntimeError(f"{loi_goc} [Dịch vụ trung gian tikwm.com cũng không lấy được: {ly_do}]")
+
+    if (TIKTOK_TRUNG_GIAN and re.search(r"(?:twitter|x)\.com/[^/]+/status", url, re.I)
+            and re.search(r"no video could be found|log in|login|cookies|nsfw|sensitive|age.restricted|authentication", msg)):
+        print("    X không cho khách xem video này -> hỏi dịch vụ trung gian FxTwitter (chỉ gửi mã tweet)...")
+        don_rac(outdir, name)
+        try:
+            return tai_x_trung_gian(url, outdir, name, ffmpeg_dir)
+        except Exception as e:
+            don_rac(outdir, name)
+            ly_do = " ".join(str(e).split())[:140]
+            raise RuntimeError(f"{loi_goc} [Dịch vụ trung gian FxTwitter cũng không lấy được: {ly_do}]")
 
     if NEN_TANG_LON.search(url):
         raise loi_goc

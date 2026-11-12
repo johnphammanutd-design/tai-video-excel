@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-title Tai video tu Excel - Giao dien
+title HT CREATIVE AGENT - Giao dien
 cd /d "%~dp0"
 
 where python >nul 2>nul
