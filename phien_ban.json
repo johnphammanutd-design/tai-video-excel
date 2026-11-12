@@ -1,11 +1,11 @@
 {
-  "phien_ban": "14",
-  "the": "v14",
-  "ghi_chu": "Thêm nút Gán file ở dòng link lỗi: chọn file đã tải tay, tool tự đặt đúng tên, chép vào đúng thư mục và chuyển H.264",
+  "phien_ban": "15",
+  "the": "v15",
+  "ghi_chu": "Tải được video TikTok bắt đăng nhập bằng cách nhờ dịch vụ trung gian tikwm.com lấy hộ (tắt được trong Cài đặt)",
   "files": {
-    "tai_video.py": "8bacd7fcba9cef4cef05763b9bade2d54b11e6c11db487c8434aac81246a2460",
-    "giao_dien.py": "fb6b56f1297a6629c1361fb2a9168f3df82a0848658c46916e200638c53c5076",
-    "giao_dien.html": "7e9b628750c2d1bba29fa66a2f428b8a5cbc888d4301a2ab4e8b7c767ceda6b2",
-    "HUONG_DAN.txt": "9ed9fd7f42d0bc58aab92b2f8cd941f5aea603fdd589cf577de396e82bf4f108"
+    "tai_video.py": "e3fda2f94bb18e4fa1692bb991ceafac36c0fb739dd97bdfeedc3db5c22c4a73",
+    "giao_dien.py": "a3d8d083f7b87ad4f24026375ecff2b7788709c09fa700007f22e85425996109",
+    "giao_dien.html": "17646b61db2704ad0ade6436cc97149b047077c30b35e79830ade2d85b2f9087",
+    "HUONG_DAN.txt": "f1fb4d723ce2042e9e0cd05cc2eb251aa788ba958d329e330a7069e44ddc6433"
   }
 }

@@ -381,6 +381,7 @@ def nap_cai_dat():
         S["luong"] = max(1, min(LUONG_TOI_DA, int(d.get("luong") or 3)))
         T.MAX_HEIGHT = int(d.get("max_height") or 0) or None
         T.CHUYEN_H264 = bool(d.get("h264", True))
+        T.TIKTOK_TRUNG_GIAN = bool(d.get("tiktok_trung_gian", True))
         S["proxy_text"] = str(d.get("proxy") or "")
         try:
             T.dat_proxy(S["proxy_text"], str(d.get("proxy_che_do") or "tat"))
@@ -396,6 +397,7 @@ def luu_cai_dat():
         T.TAM_DIR.mkdir(exist_ok=True)
         _file_cai_dat().write_text(json.dumps({
             "luong": S["luong"], "max_height": T.MAX_HEIGHT or 0, "h264": T.CHUYEN_H264,
+            "tiktok_trung_gian": T.TIKTOK_TRUNG_GIAN,
             "proxy": S.get("proxy_text", ""), "proxy_che_do": T.PROXY_CHE_DO}), encoding="utf-8")
     except Exception:
         pass
@@ -732,6 +734,7 @@ def trang_thai(log_tu=0):
             "items": S["items"], "excel": S["excel"], "outdir": S["outdir"] or thu_muc_mac_dinh(),
             "running": S["running"], "stopping": S["stopping"], "env": S["env"], "report": S["report"],
             "count": dem, "cookies": ds_cookie(), "max_height": T.MAX_HEIGHT or 0, "h264": T.CHUYEN_H264,
+            "tiktok_mid": T.TIKTOK_TRUNG_GIAN,
             "log": LOG[-300:], "cur": S["cur"]["id"] if S["cur"] else None, "version": T.PHIEN_BAN,
             "suspect": sum(1 for i in S["items"] if i.get("suspect")),
             "threads": S["luong"], "threads_max": LUONG_TOI_DA,
@@ -849,6 +852,8 @@ class H(BaseHTTPRequestHandler):
                     T.MAX_HEIGHT = int(d.get("max_height") or 0) or None
                 if "h264" in d:
                     T.CHUYEN_H264 = bool(d.get("h264"))
+                if "tiktok_mid" in d:
+                    T.TIKTOK_TRUNG_GIAN = bool(d.get("tiktok_mid"))
                 if "threads" in d:
                     S["luong"] = max(1, min(LUONG_TOI_DA, int(d.get("threads") or 1)))
                 luu_cai_dat()

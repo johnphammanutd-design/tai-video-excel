@@ -35,6 +35,11 @@ CÔNG CỤ TẢI VIDEO HÀNG LOẠT TỪ FILE EXCEL
      Tool tự chuyển các file đó sang MP4 H.264 ngay sau khi tải, không cần HandBrake. File đã
      là H.264 được giữ nguyên. File tải từ bản cũ: mở lại đúng file Excel đó rồi bấm tải, tool
      không tải lại mà chỉ chuyển những file cần chuyển.
+   - TikTok bắt đăng nhập (mặc định bật): một số video TikTok bị gắn nhãn "nội dung nhạy cảm",
+     phải đăng nhập mới xem được. Với RIÊNG các link đó, tool gửi địa chỉ video cho dịch vụ
+     trung gian tikwm.com để lấy hộ (giống cách các trang như snaptik làm), rồi tải video về.
+     Tool chỉ gửi địa chỉ video, không gửi tên file, danh sách hay thông tin nào khác. Không
+     muốn gửi link cho bên thứ ba thì tắt mục này trong Cài đặt.
    - Proxy HTTP (Cài đặt > Proxy, không bắt buộc): mỗi dòng một proxy, dạng
      domain:port:user:pass. Có 3 chế độ: Tắt; "Chỉ khi bị chặn" (tải thẳng trước, link
      nào lỗi do mạng hoặc bị chặn địa chỉ mới đi qua proxy - đỡ tốn dung lượng proxy);
@@ -47,6 +52,7 @@ CÔNG CỤ TẢI VIDEO HÀNG LOẠT TỪ FILE EXCEL
      nhật khi bạn chưa bấm.
    Giao diện chỉ chạy trên máy bạn (địa chỉ 127.0.0.1). Tool không gửi danh sách link hay
    file của bạn đi đâu; nó chỉ tải video, cập nhật yt-dlp và hỏi số phiên bản mới.
+   Ngoại lệ duy nhất: link TikTok bắt đăng nhập được gửi cho tikwm.com (xem mục trên, tắt được).
 
 3b. CHẠY BẰNG DÒNG LỆNH (cách cũ, vẫn dùng được)
    - Cách 1: Kéo thả file Excel vào CHAY_TOOL.bat.

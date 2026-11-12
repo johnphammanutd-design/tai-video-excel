@@ -39,6 +39,10 @@ MAX_HEIGHT = None
 # Tự chuyển video về MP4 mã H.264 (Premiere và Windows đọc được ngay). False = giữ nguyên file tải về.
 CHUYEN_H264 = True
 
+# TikTok bắt đăng nhập mới xem được: nhờ dịch vụ trung gian tikwm.com lấy hộ (chỉ gửi địa chỉ video đó đi).
+# False = không bao giờ gửi link cho bên thứ ba; các link này sẽ báo lỗi "cần đăng nhập".
+TIKTOK_TRUNG_GIAN = True
+
 # Từ khóa nhận diện tiêu đề cột (không phân biệt hoa thường/dấu)
 LINK_HEADER_KEYS = ["link video", "link", "url"]
 NAME_HEADER_KEYS = ["dat ten file", "ten file", "file name", "filename"]
@@ -47,7 +51,7 @@ FALLBACK_LINK_COL = 3
 FALLBACK_NAME_COL = 4
 # ================================================================
 
-PHIEN_BAN = "14"
+PHIEN_BAN = "15"
 SCRIPT_DIR = Path(__file__).resolve().parent
 VIDEO_EXTS = {".mp4", ".mkv", ".webm", ".mov", ".m4v", ".flv", ".avi"}
 
@@ -942,6 +946,59 @@ def tai_truc_tiep(u: str, dest: Path, ua: str, referer: str):
     return dest
 
 
+_KHOA_TG = threading.Lock()
+_TG_LAN_CUOI = [0.0]
+
+
+def tai_tiktok_trung_gian(url: str, outdir: Path, name: str, ffmpeg_dir):
+    """TikTok bắt đăng nhập ("may not be comfortable for some audiences"): nhờ dịch vụ trung gian tikwm.com lấy hộ,
+    giống cách các trang kiểu snaptik làm. CHỈ gửi đi địa chỉ video. Trả về (file, cách lấy)."""
+    import json
+    import time
+    import urllib.parse
+    import urllib.request
+
+    with _KHOA_TG:   # cổng miễn phí của họ giới hạn 1 lượt/giây
+        cho = 1.3 - (time.time() - _TG_LAN_CUOI[0])
+        if cho > 0:
+            time.sleep(cho)
+        try:
+            req = urllib.request.Request(
+                "https://www.tikwm.com/api/?" + urllib.parse.urlencode({"url": url, "hd": 1}),
+                headers={"User-Agent": UA, "Accept": "application/json"})
+            with _mo_url(req, 40) as r:
+                d = json.loads(r.read().decode("utf-8", "ignore"))
+        finally:
+            _TG_LAN_CUOI[0] = time.time()
+    dl = d.get("data") if isinstance(d, dict) else None
+    if not isinstance(dl, dict) or d.get("code") != 0:
+        raise RuntimeError(str((d or {}).get("msg") or "không có dữ liệu")[:120])
+    m = re.search(r"/(?:video|photo|v)/(\d{15,})", url)
+    if m and str(dl.get("id") or "") != m.group(1):
+        raise RuntimeError("dịch vụ trả về video khác mã với link")
+    if dl.get("images") and not (dl.get("hdplay") or dl.get("play")):
+        raise RuntimeError("đây là bài ảnh, không phải video")
+    dich = outdir / f"{name}.mp4"
+    loi = []
+    for u in dict.fromkeys(x for x in (dl.get("hdplay"), dl.get("play")) if x):
+        if u.startswith("/"):
+            u = "https://www.tikwm.com" + u
+        don_rac(outdir, name)
+        try:
+            tai_truc_tiep(u, dich, UA, "https://www.tikwm.com/" if "tikwm.com" in u else "https://www.tiktok.com/")
+            kt = kiem_tra_luong(dich, ffmpeg_dir)
+            if kt and not kt[0]:
+                raise RuntimeError("file không có hình")
+            dai = float(dl.get("duration") or 0)
+            if kt and dai > 2 and abs(kt[2] - dai) > max(3.0, dai * 0.1):
+                raise RuntimeError(f"thời lượng lệch ({kt[2]:.0f}s so với {dai:.0f}s)")
+            return dich, "dịch vụ trung gian tikwm.com (TikTok bắt đăng nhập)"
+        except Exception as e:
+            dich.unlink(missing_ok=True)
+            loi.append(re.sub(r"\s+", " ", str(e))[:80])
+    raise RuntimeError("có link nhưng không tải được: " + "; ".join(dict.fromkeys(loi)) if loi else "không có link video")
+
+
 def tai_html(url: str, ua: str = None) -> str:
     import urllib.request
 
@@ -1370,6 +1427,17 @@ def _tai_mot(item, outdir: Path, ffmpeg_dir):
             return ytdlp_tai(url, outdir, name, ffmpeg_dir, impersonate=True), "yt-dlp (giả lập Chrome)"
         except Exception as e:
             ghi_chu_douyin += " [Giả lập Chrome cũng lỗi: " + re.sub(r"\s+", " ", str(e))[:140] + "]"
+
+    if (TIKTOK_TRUNG_GIAN and re.search(r"tiktok\.com", url, re.I)
+            and re.search(r"log in|login|comfortable|cookies|permission|private|ip address is blocked", msg)):
+        print("    TikTok bắt đăng nhập -> nhờ dịch vụ trung gian tikwm.com lấy hộ (chỉ gửi địa chỉ video)...")
+        don_rac(outdir, name)
+        try:
+            return tai_tiktok_trung_gian(url, outdir, name, ffmpeg_dir)
+        except Exception as e:
+            don_rac(outdir, name)
+            ly_do = " ".join(str(e).split())[:140]
+            raise RuntimeError(f"{loi_goc} [Dịch vụ trung gian tikwm.com cũng không lấy được: {ly_do}]")
 
     if NEN_TANG_LON.search(url):
         raise loi_goc
