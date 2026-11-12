@@ -1,0 +1,32 @@
+﻿ĐÓNG GÓI THÀNH BỘ CÀI WINDOWS (TaiVideo_Setup.exe)
+==================================================
+
+Làm 1 lần trên 1 máy Windows 10/11 (64-bit) có mạng. Máy này KHÔNG cần cài Python.
+
+1. Nhấp đúp DONG_GOI.bat và chờ khoảng 5-10 phút. Script sẽ:
+   - tải Python 3.12 bản nhúng từ python.org,
+   - cài yt-dlp, playwright, curl_cffi, ffmpeg vào bản Python đó,
+   - chép file của tool vào,
+   - tạo TaiVideo_Portable.zip,
+   - tạo TaiVideo_Setup.exe bằng Inno Setup (tự cài Inno Setup qua winget nếu chưa có).
+
+2. Kết quả nằm ngay trong thư mục này:
+   - TaiVideo_Setup.exe    : bộ cài, gửi cho mọi người.
+   - TaiVideo_Portable.zip : bản không cần cài; giải nén rồi chạy "Mo Tai Video.bat".
+
+3. Người dùng nhận TaiVideo_Setup.exe:
+   - Nhấp đúp để cài. Không cần quyền quản trị, không cần Python.
+   - Windows có thể hiện cảnh báo SmartScreen vì bộ cài không có chữ ký số:
+     bấm "More info" -> "Run anyway".
+   - Mở tool bằng biểu tượng "Tải Video Excel" trên Desktop hoặc Start Menu.
+   - Gỡ cài đặt trong Settings -> Apps như phần mềm bình thường.
+
+GHI CHÚ
+- Tool cài vào %LocalAppData%\Programs\TaiVideoExcel của từng người.
+- Mỗi ngày lần mở đầu tiên, tool tự cập nhật yt-dlp (cần mạng).
+- Cookie đăng nhập nằm trong thư mục cài của từng người, KHÔNG nằm trong bộ cài.
+  Mỗi người tự thêm cookie của mình ở mục "Đăng nhập (cookie)".
+- Muốn phát hành bản mới: sửa PhienBan trong TaiVideo.iss rồi chạy lại DONG_GOI.bat.
+  Người dùng cài đè bản mới lên bản cũ.
+- Nếu script báo thiếu Inno Setup: cài miễn phí tại https://jrsoftware.org/isdl.php
+  rồi chạy lại DONG_GOI.bat.

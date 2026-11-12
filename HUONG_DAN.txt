@@ -1,0 +1,90 @@
+CÔNG CỤ TẢI VIDEO HÀNG LOẠT TỪ FILE EXCEL
+=========================================
+
+1. CÀI ĐẶT (làm 1 lần)
+   - Cài Python: https://www.python.org/downloads/
+     Lúc cài, NHỚ TICK ô "Add python.exe to PATH".
+   - Giải nén thư mục này ra một chỗ cố định (vd. D:\TaiVideoTuExcel).
+
+2. CHUẨN BỊ FILE EXCEL (.xlsx)
+   - Cần 2 cột có tiêu đề: "Link video" và "Đặt tên file tải về"
+     (đúng như mẫu; công cụ tự tìm cột theo tiêu đề, không phụ thuộc vị trí).
+   - Nếu không tìm thấy tiêu đề, công cụ dùng cột C (link) và D (tên file).
+   - File có NHIỀU SHEET: tool tải hết mọi sheet có 2 cột trên, mỗi sheet lưu
+     vào một thư mục con mang tên sheet (vd. "Phần 1 - EN\2.1.mp4").
+   - LƯU Ý tên file dạng số: Excel coi 8.10 là 8.1. Nếu cần tên như 8.10,
+     hãy định dạng cột tên file là Text (Văn bản) trước khi nhập.
+
+3. CHẠY BẰNG GIAO DIỆN (khuyên dùng)
+   - Nhấp đúp MO_GIAO_DIEN.bat (hoặc kéo thả file Excel vào nó).
+   - Một cửa sổ giao diện mở ra. Giữ cửa sổ đen phía sau trong lúc dùng;
+     đóng cửa sổ giao diện thì tool tự thoát sau khoảng 1 phút.
+   - Trang chủ: bấm "Chọn file Excel", hoặc dán link vào ô để tải nhanh.
+   - Danh sách tải: xem trạng thái từng link, lọc link lỗi, "Thử lại link lỗi".
+   - Đăng nhập (cookie): mở thư mục cookie và xem tool đã đọc được file nào.
+   - Cài đặt: chất lượng, thư mục lưu, tình trạng các thành phần.
+   Giao diện chỉ chạy trên máy bạn (địa chỉ 127.0.0.1), không gửi dữ liệu đi đâu.
+
+3b. CHẠY BẰNG DÒNG LỆNH (cách cũ, vẫn dùng được)
+   - Cách 1: Kéo thả file Excel vào CHAY_TOOL.bat.
+   - Cách 2: Nhấp đúp CHAY_TOOL.bat rồi chọn file Excel trong hộp thoại.
+   - Video được lưu vào thư mục "<tên file excel>_video" cạnh file Excel,
+     ví dụ 2.1.mp4, 2.2.mp4, 3.1.mp4...
+   - Mỗi lần chạy có file báo cáo _ket_qua_....csv (mở bằng Excel) ghi link nào
+     thành công / lỗi và lý do.
+   - Có link lỗi? Chạy lại: video đã tải sẽ được bỏ qua, chỉ thử lại link lỗi.
+   - Mỗi lần chạy, công cụ tự cập nhật yt-dlp (các trang hay đổi cách chặn tải,
+     bản mới nhất thường sửa được).
+
+4. TRANG BÁO LỖI "CẦN ĐĂNG NHẬP" (Facebook, Instagram, TikTok, X, Douyin...)
+   Một số video chỉ xem được khi đã đăng nhập (video giới hạn tuổi, bài trong
+   nhóm, bài riêng tư). Cách khắc phục:
+   - Cài tiện ích trình duyệt "Get cookies.txt LOCALLY" (Chrome/Edge/Firefox).
+   - Đăng nhập trang cần tải (vd. tiktok.com), bấm tiện ích -> Export.
+   - Tạo thư mục "cookies" cạnh tai_video.py, bỏ file vừa tải vào đó.
+     Mỗi trang một file, tên tùy ý: cookies\facebook.txt, cookies\tiktok.txt,
+     cookies\instagram.txt, cookies\x.txt, cookies\douyin.txt...
+     Tool tự gộp tất cả (file cookies.txt cũ cạnh tool vẫn dùng được).
+   - Chạy lại công cụ. Đầu màn hình sẽ hiện tool đã đọc được file cookie nào.
+   Lưu ý: file cookie chứa phiên đăng nhập của bạn, KHÔNG gửi cho người khác.
+   Nên dùng tài khoản phụ, tải với tốc độ vừa phải để tránh bị khóa tạm thời.
+   Riêng DOUYIN: thường không cần đăng nhập, tool tự mở trình duyệt ẩn để lấy
+   cookie mới. Nếu vẫn lỗi thì mở douyin.com trên trình duyệt rồi xuất cookie.
+
+5. TÙY CHỈNH (mở tai_video.py bằng Notepad, phần CẤU HÌNH ở đầu file)
+   - MAX_HEIGHT = 1080   -> giới hạn chất lượng tối đa 1080p (mặc định: cao nhất).
+   - COOKIES_FROM_BROWSER = "firefox" -> lấy cookie trực tiếp từ Firefox
+     (Chrome/Edge bản mới thường không hỗ trợ cách này, nên dùng cookies.txt).
+
+6. TRANG HỖ TRỢ VÀ TRANG BÁO CÓ VIDEO NHÚNG
+   YouTube, TikTok, Facebook, Instagram, Pinterest, X/Twitter, Snapchat, Reddit,
+   Vimeo, Bilibili, LinkedIn... (~1.800 trang qua yt-dlp).
+   Với trang báo (kenh14, 24h, vnexpress, aa.com.tr...), tool thử lần lượt:
+     B1. yt-dlp trực tiếp.
+     B2. Đọc mã trang, tìm link video nhúng (mp4, m3u8, iframe YouTube/Facebook...).
+     B3. Mở trang bằng Edge/Chrome chạy ẩn, tự bấm phát và bắt link video thật
+         (dùng thư viện playwright, CHAY_TOOL.bat tự cài; dùng sẵn Edge trên Windows).
+   Cột "Cách lấy" trong file báo cáo cho biết video được lấy theo cách nào.
+   Nếu trang có nhiều video, tool lấy video đầu tiên tìm thấy, nên hãy KIỂM TRA
+   lại các file lấy bằng "dò" cho đúng clip mong muốn.
+   Trang yêu cầu đăng nhập/mua bản quyền (vd. thư viện vbear.media) có thể vẫn
+   không tải được.
+
+7. macOS / Linux
+   pip3 install -U yt-dlp openpyxl imageio-ffmpeg playwright
+   python3 tai_video.py danh_sach.xlsx
+   (Máy không có Chrome: chạy thêm  python3 -m playwright install chromium)
+
+8. LỖI DO MẠNG (không phải do tool)
+   - "Failed to resolve ..." / "getaddrinfo failed" (hay gặp với Reddit): nhà mạng
+     đang chặn tên miền. Đổi DNS của máy sang 1.1.1.1 hoặc 8.8.8.8, hoặc bật VPN
+     (vd. Cloudflare WARP miễn phí) rồi chạy lại.
+   - "SSL ... EOF" (hay gặp với LinkedIn): kết nối bị ngắt giữa chừng. Tool tự thử
+     lại bằng cách giả lập Chrome; nếu vẫn lỗi thì xử lý như trên.
+   - "IP address is blocked": video chặn theo quốc gia, cần VPN.
+
+9. ĐỌC DÒNG TRẠNG THÁI ĐẦU MÀN HÌNH
+   - "Dò video bằng trình duyệt ẩn: SẴN SÀNG"  -> tải được video nhúng trong báo
+     dùng JavaScript (vietnamnet, laodong...). Nếu ghi "KHÔNG CHẠY" thì làm theo
+     lệnh gợi ý ngay sau đó.
+   - "Giả lập Chrome (curl_cffi): SẴN SÀNG"    -> qua được trang dùng Cloudflare.

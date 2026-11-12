@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="vi" translate="no" class="notranslate">
+<head>
+<meta charset="utf-8">
+<meta name="google" content="notranslate">
+<title>Tải Video từ Excel</title>
+<link rel="icon" href="/favicon.ico">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{
+  --bg:#f4f6f5; --panel:#ffffff; --line:#e2e7e5; --text:#1c2a27; --muted:#6b7c78;
+  --accent:#0f766e; --accent-2:#115e59; --accent-soft:#e3f2ef;
+  --ok:#15803d; --ok-soft:#e5f5ea; --err:#b42318; --err-soft:#fdecea; --warn:#b45309; --warn-soft:#fdf3e1;
+  --run:#1d4ed8; --run-soft:#e6eeff;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font:14px/1.45 "Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;color:var(--text);background:var(--bg);display:flex;overflow:hidden}
+button{font:inherit;cursor:pointer}
+svg{flex:none}
+
+/* Thanh bên */
+#side{width:216px;padding:12px 8px;display:flex;flex-direction:column;gap:2px;flex:none}
+.brand{display:flex;align-items:center;gap:10px;padding:6px 10px 14px;font-weight:700;font-size:15px}
+.brand .logo{width:30px;height:30px;border-radius:9px;background:var(--accent);display:grid;place-items:center;color:#fff}
+.nav{display:flex;align-items:center;gap:11px;padding:9px 12px;border-radius:9px;border:0;background:none;color:var(--text);text-align:left;width:100%}
+.nav:hover{background:#e9edeb}
+.nav.on{background:#e1e7e4;font-weight:600}
+.nav svg{color:var(--accent)}
+.nav .badge{margin-left:auto;font-size:11.5px;font-weight:600;padding:1px 7px;border-radius:99px;background:var(--err-soft);color:var(--err)}
+.nav .badge.g{background:#e6ebe9;color:var(--muted)}
+.sec{font-size:11.5px;color:var(--muted);padding:14px 12px 4px}
+#envbox{margin-top:auto;padding:10px 12px;font-size:12px;color:var(--muted);line-height:1.7}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:7px;background:#b9c4c1}
+.dot.ok{background:#22a559}.dot.bad{background:#d9463a}.dot.wait{background:#e0a23a}
+
+/* Khung chính */
+#main{flex:1;display:flex;flex-direction:column;min-width:0;padding:8px 8px 8px 0;gap:8px}
+#banner{display:none;align-items:center;gap:12px;padding:10px 14px;border-radius:10px;background:var(--warn-soft);border:1px solid #f1d9a8;color:#7a4a05;font-weight:500}
+#banner button{margin-left:auto}
+#page{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:auto;min-height:0;position:relative}
+.view{display:none;padding:26px 30px}
+.view.on{display:block}
+h1{font-size:19px;margin:0 0 4px}
+.sub{color:var(--muted);margin:0 0 18px}
+
+.btn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:7px 13px;font-weight:600;color:var(--text);display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.btn:hover{background:#f3f6f5}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.pri:hover{background:var(--accent-2)}
+.btn.danger{color:var(--err);border-color:#f0c4be}
+.btn.sm{padding:4px 9px;font-size:12.5px;font-weight:500}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.link{background:none;border:0;color:var(--accent);font-weight:600;padding:4px 8px}
+.link:hover{text-decoration:underline}
+
+/* Trang chủ */
+#home{max-width:820px;margin:0 auto;padding-top:7vh;text-align:center}
+.hero{width:74px;height:74px;border-radius:22px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;margin:0 auto 14px}
+#home h1{font-size:23px}
+.bar{display:flex;align-items:center;gap:8px;margin:22px auto 8px;padding:7px;border:1px solid var(--line);border-radius:14px;background:#fff;box-shadow:0 6px 22px rgba(20,60,50,.08);max-width:680px}
+.bar input{flex:1;border:0;outline:0;font:inherit;font-size:15px;padding:8px 10px;min-width:0;background:none}
+.bar input.nm{flex:0 0 150px;border-left:1px solid var(--line)}
+.or{color:var(--muted);font-size:12.5px;margin:14px 0}
+.drop{max-width:680px;margin:0 auto;border:1.5px dashed #b8c6c2;border-radius:14px;padding:20px;display:flex;align-items:center;gap:16px;text-align:left;background:#fafcfb}
+.drop .ic{width:44px;height:44px;border-radius:11px;background:var(--ok-soft);color:var(--ok);display:grid;place-items:center}
+.drop b{display:block}
+.drop small{color:var(--muted)}
+.drop .btn{margin-left:auto}
+#loaded{max-width:680px;margin:18px auto 0;text-align:left;display:none}
+.card{border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:#fff}
+.row{display:flex;align-items:center;gap:10px}
+.path{font-family:Consolas,monospace;font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;text-align:left;flex:1;min-width:0}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0}
+.tile{border:1px solid var(--line);border-radius:10px;padding:9px 12px}
+.tile b{font-size:20px;display:block;line-height:1.2}
+.tile span{font-size:12px;color:var(--muted)}
+.tile.e b{color:var(--err)}.tile.o b{color:var(--ok)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.chip{font-size:12px;padding:2px 9px;border-radius:99px;background:#eef2f0;color:#42524e}
+.prog{height:6px;border-radius:99px;background:#e7ecea;overflow:hidden;margin-top:12px}
+.prog i{display:block;height:100%;background:var(--accent);width:0;transition:width .4s}
+
+/* Danh sách */
+#list{padding:0;display:none;flex-direction:column;height:100%}
+#list.on{display:flex}
+.tool{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:#fff;padding:6px 11px;font-size:13px;color:var(--muted);border-right:1px solid var(--line)}
+.seg button:last-child{border-right:0}
+.seg button.on{background:var(--accent-soft);color:var(--accent-2);font-weight:600}
+.tool input,.tool select{border:1px solid var(--line);border-radius:8px;padding:6px 10px;font:inherit;outline:0;background:#fff}
+.tool input{width:190px}
+.sp{flex:1}
+.tw{flex:1;overflow:auto;min-height:0}
+table{width:100%;border-collapse:collapse;table-layout:fixed}
+th{position:sticky;top:0;background:#f7f9f8;text-align:left;font-size:12px;color:var(--muted);font-weight:600;padding:8px 10px;border-bottom:1px solid var(--line);z-index:1}
+td{padding:8px 10px;border-bottom:1px solid #eef1f0;vertical-align:middle;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+tr:hover td{background:#fafcfb}
+td.nm{font-weight:700;color:var(--accent-2)}
+td a{color:#1a5fb4;text-decoration:none}
+td a:hover{text-decoration:underline}
+td.note{white-space:normal;font-size:12.5px;color:var(--muted);line-height:1.35}
+td.note.er{color:var(--err)}
+.st{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;padding:2px 9px;border-radius:99px}
+.st.pending{background:#eef2f0;color:#5b6b67}.st.done{background:var(--ok-soft);color:var(--ok)}
+.st.exists{background:#eaf3ee;color:#3d7a55}.st.error{background:var(--err-soft);color:var(--err)}
+.st.running{background:var(--run-soft);color:var(--run)}
+.mini{height:4px;border-radius:9px;background:#dfe6f7;margin-top:5px;overflow:hidden}
+.mini i{display:block;height:100%;background:var(--run)}
+.empty{padding:70px 20px;text-align:center;color:var(--muted)}
+
+/* Cookie / Cài đặt / Nhật ký */
+.grid{display:grid;gap:12px;max-width:820px}
+.kv{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid #eef1f0}
+.kv:last-child{border-bottom:0}
+.kv>div:first-child{flex:1}
+.kv small{color:var(--muted);display:block}
+ol{padding-left:20px;margin:6px 0;color:#34443f}
+ol li{margin:4px 0}
+code{background:#eef2f0;border-radius:5px;padding:1px 6px;font-family:Consolas,monospace;font-size:12.5px}
+#logbox{font:12px/1.55 Consolas,monospace;white-space:pre-wrap;word-break:break-all;background:#10201d;color:#cfe5df;border-radius:10px;padding:14px;height:calc(100vh - 190px);overflow:auto}
+
+/* Thanh dưới */
+#foot{display:none;align-items:center;gap:10px;padding:9px 14px;background:var(--panel);border:1px solid var(--line);border-radius:10px}
+#foot .msg{font-weight:600}
+#foot .msg.er{color:var(--err)}
+#toast{position:fixed;left:50%;bottom:70px;transform:translateX(-50%);background:#1c2a27;color:#fff;padding:10px 16px;border-radius:9px;display:none;max-width:70vw;z-index:9;box-shadow:0 8px 30px rgba(0,0,0,.25)}
+</style>
+</head>
+<body>
+<aside id="side">
+  <div class="brand"><span class="logo"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg></span>Tải Video Excel</div>
+  <button class="nav on" data-v="home"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-7 8 7v8a1 1 0 0 1-1 1h-4v-6h-6v6H5a1 1 0 0 1-1-1z"/></svg>Trang chủ</button>
+  <button class="nav" data-v="list"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>Danh sách tải<span class="badge g" id="nb-all" style="display:none"></span></button>
+  <button class="nav" data-v="cookie"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9m-4 4l3 3"/></svg>Đăng nhập (cookie)<span class="badge g" id="nb-ck" style="display:none"></span></button>
+  <button class="nav" data-v="log"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h14v16H5zM9 9h6M9 13h6M9 17h3"/></svg>Nhật ký</button>
+  <div class="sec">Ứng dụng</div>
+  <button class="nav" data-v="set"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg>Cài đặt</button>
+  <button class="nav" id="nav-guide"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 1-1 1.7M12 17h.01"/></svg>Hướng dẫn</button>
+  <div id="envbox"></div>
+</aside>
+
+<main id="main">
+  <div id="banner"><span id="banner-t"></span><button class="btn sm" data-go="set">Xem cài đặt</button></div>
+  <div id="dupbar" style="display:none;align-items:center;gap:12px;padding:10px 14px;border-radius:10px;background:var(--err-soft);border:1px solid #f3c7c1;color:#8a1c12;font-weight:500"><span id="dup-t"></span><span class="sp"></span><button class="btn sm" id="b-dupview">Xem</button><button class="btn sm pri" id="b-dupfix">Xóa và tải lại</button></div>
+  <div id="page">
+
+    <section class="view on" id="home">
+      <div class="hero"><svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-5-5m5 5l5-5M4 20h16"/></svg></div>
+      <h1>Tải video theo danh sách Excel</h1>
+      <p class="sub">YouTube, TikTok, Facebook, Instagram, Douyin, báo điện tử… File lưu đúng tên trong cột “Đặt tên file tải về”.</p>
+
+      <div class="drop">
+        <span class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6zM14 3v5h5M9 12l5 6m0-6l-5 6"/></svg></span>
+        <div><b>Mở file Excel (.xlsx)</b><small>Cần 2 cột: “Link video” và “Đặt tên file tải về”. Đọc được nhiều sheet. Có thể kéo thả file vào cửa sổ này.</small></div>
+        <button class="btn pri" id="b-excel">Chọn file Excel</button>
+      </div>
+      <div class="or">hoặc tải nhanh một vài link</div>
+      <div class="bar">
+        <input id="q" placeholder="Dán link video (có thể dán nhiều link, cách nhau bằng dấu cách)" autocomplete="off">
+        <input id="qn" class="nm" placeholder="Tên file (tùy chọn)" autocomplete="off">
+        <button class="btn pri" id="b-add">Tải</button>
+      </div>
+
+      <div id="loaded">
+        <div class="card">
+          <div class="row"><b id="ld-name"></b><span class="sp"></span><button class="link" id="b-clear">Bỏ danh sách</button></div>
+          <div class="chips" id="ld-sheets"></div>
+          <div class="tiles">
+            <div class="tile"><b id="t-all">0</b><span>Tổng link</span></div>
+            <div class="tile o"><b id="t-ok">0</b><span>Đã tải</span></div>
+            <div class="tile"><b id="t-wait">0</b><span>Chờ tải</span></div>
+            <div class="tile e"><b id="t-err">0</b><span>Lỗi</span></div>
+          </div>
+          <div class="row"><span style="color:var(--muted);font-size:12.5px">Lưu vào</span><span class="path" id="ld-out"></span>
+            <button class="btn sm" id="b-out">Đổi</button><button class="btn sm" data-open="outdir">Mở thư mục</button></div>
+          <div class="prog"><i id="pg"></i></div>
+          <div class="row" style="margin-top:14px">
+            <button class="btn pri" id="b-start">Bắt đầu tải</button>
+            <button class="btn danger" id="b-stop" style="display:none">Dừng</button>
+            <button class="btn" data-go="list">Xem danh sách</button>
+            <span class="sp"></span><span id="ld-now" style="color:var(--muted);font-size:12.5px"></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="view" id="list">
+      <div class="tool">
+        <div class="seg" id="flt">
+          <button data-f="all" class="on">Tất cả <span></span></button>
+          <button data-f="todo">Chờ <span></span></button>
+          <button data-f="ok">Đã tải <span></span></button>
+          <button data-f="error">Lỗi <span></span></button>
+          <button data-f="suspect" id="f-sus" style="display:none">Nghi tải sai <span></span></button>
+        </div>
+        <select id="fsheet"></select>
+        <input id="fq" placeholder="Tìm tên file hoặc link">
+        <span class="sp"></span>
+        <button class="btn" id="b-retry">Thử lại link lỗi</button>
+        <button class="btn" data-open="outdir">Mở thư mục</button>
+        <button class="btn" data-open="report" id="b-rep" style="display:none">Mở báo cáo</button>
+        <button class="btn pri" id="b-start2">Bắt đầu tải</button>
+        <button class="btn danger" id="b-stop2" style="display:none">Dừng</button>
+      </div>
+      <div class="tw">
+        <table>
+          <colgroup><col style="width:118px"><col style="width:84px"><col><col style="width:138px"><col style="width:34%"><col style="width:86px"></colgroup>
+          <thead><tr><th>Sheet</th><th>Tên file</th><th>Link video</th><th>Trạng thái</th><th>Ghi chú</th><th></th></tr></thead>
+          <tbody id="tb"></tbody>
+        </table>
+        <div class="empty" id="empty">Chưa có link nào. Mở file Excel hoặc dán link ở Trang chủ.</div>
+      </div>
+    </section>
+
+    <section class="view" id="cookie">
+      <h1>Đăng nhập bằng cookie</h1>
+      <p class="sub">Một số video chỉ tải được khi đã đăng nhập: video giới hạn tuổi trên TikTok, bài trong nhóm Facebook, Instagram riêng tư…</p>
+      <div class="grid">
+        <div class="card">
+          <b>Cách thêm cookie</b>
+          <ol>
+            <li>Cài tiện ích trình duyệt <code>Get cookies.txt LOCALLY</code> (Chrome, Edge hoặc Firefox).</li>
+            <li>Đăng nhập trang cần tải, ví dụ tiktok.com, rồi bấm tiện ích và chọn <b>Export</b>.</li>
+            <li>Bỏ file vừa tải vào thư mục cookie. Mỗi trang một file, tên tùy ý.</li>
+            <li>Quay lại đây và bấm <b>Thử lại link lỗi</b>.</li>
+          </ol>
+          <div class="row" style="margin-top:10px"><button class="btn pri" data-open="cookies">Mở thư mục cookie</button>
+          <small style="color:var(--muted)">File cookie chứa phiên đăng nhập của bạn. Không gửi cho người khác, nên dùng tài khoản phụ.</small></div>
+        </div>
+        <div class="card"><b>File cookie đang có</b><div id="cklist"></div></div>
+      </div>
+    </section>
+
+    <section class="view" id="log">
+      <h1>Nhật ký</h1><p class="sub">Những gì tool đang làm, giống cửa sổ dòng lệnh.</p>
+      <div id="logbox"></div>
+    </section>
+
+    <section class="view" id="set">
+      <h1>Cài đặt</h1><p class="sub">Tùy chọn tải và tình trạng các thành phần.</p>
+      <div class="grid">
+        <div class="card">
+          <div class="kv"><div><b>Chất lượng tối đa</b><small>Giảm xuống nếu muốn file nhẹ hơn.</small></div>
+            <select id="mh" style="border:1px solid var(--line);border-radius:8px;padding:6px 10px;font:inherit">
+              <option value="0">Cao nhất có thể</option><option value="2160">2160p (4K)</option><option value="1080">1080p</option><option value="720">720p</option><option value="480">480p</option></select></div>
+          <div class="kv"><div><b>Thư mục lưu video</b><small id="set-out"></small></div><button class="btn" id="b-out2">Đổi thư mục</button></div>
+        </div>
+        <div class="card" id="envcard"></div>
+      </div>
+    </section>
+
+  </div>
+  <div id="foot"><span class="msg" id="f-msg"></span><span class="sp"></span>
+    <button class="link" id="f-view">Xem link lỗi</button><button class="link" id="f-retry">Thử lại</button></div>
+</main>
+<div id="toast"></div>
+
+<script>
+const TOKEN="__TOKEN__";
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+let ST=null, FLT="all", busy=false;
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function toast(t){const e=$("#toast");e.textContent=t;e.style.display="block";clearTimeout(toast.t);toast.t=setTimeout(()=>e.style.display="none",5000)}
+async function api(path,body){
+  try{
+    const r=await fetch(path,{method:body===undefined?"GET":"POST",headers:{"X-Token":TOKEN,"Content-Type":"application/json"},body:body===undefined?undefined:JSON.stringify(body)});
+    const j=await r.json(); if(j.error) toast(j.error); return j;
+  }catch(e){ return {error:"mất kết nối"} }
+}
+async function act(path,body){ if(busy)return; busy=true; const j=await api(path,body||{}); busy=false; await poll(); return j }
+
+function go(v){ $$(".nav[data-v]").forEach(b=>b.classList.toggle("on",b.dataset.v===v)); $$(".view").forEach(s=>s.classList.toggle("on",s.id===v)); if(v==="log"){const l=$("#logbox");l.scrollTop=l.scrollHeight} }
+$$(".nav[data-v]").forEach(b=>b.onclick=()=>go(b.dataset.v));
+document.addEventListener("click",e=>{
+  const g=e.target.closest("[data-go]"); if(g) go(g.dataset.go);
+  const o=e.target.closest("[data-open]"); if(o) act("/api/open",{what:o.dataset.open,id:+o.dataset.id||undefined});
+  const r=e.target.closest("[data-retry]"); if(r) act("/api/start",{ids:[+r.dataset.retry]});
+});
+$("#nav-guide").onclick=()=>act("/api/open",{what:"guide"});
+$("#b-excel").onclick=async()=>{ toast("Đang mở hộp thoại chọn file…"); await act("/api/pick_excel") };
+$("#b-out").onclick=$("#b-out2").onclick=()=>act("/api/pick_outdir");
+$("#b-clear").onclick=()=>act("/api/clear");
+const start=()=>act("/api/start",{mode:"all"}), stop=()=>act("/api/stop"), retry=()=>act("/api/start",{mode:"failed"});
+$("#b-start").onclick=$("#b-start2").onclick=start; $("#b-stop").onclick=$("#b-stop2").onclick=stop;
+$("#b-retry").onclick=$("#f-retry").onclick=retry;
+$("#f-view").onclick=()=>{setF("error");go("list")};
+$("#b-dupview").onclick=()=>{setF("suspect");go("list")};
+$("#b-dupfix").onclick=()=>act("/api/fix_suspect");
+// Kéo thả file Excel vào cửa sổ
+addEventListener("dragover",e=>e.preventDefault());
+addEventListener("drop",async e=>{ e.preventDefault(); const f=e.dataTransfer.files[0]; if(!f) return;
+  toast("Đang mở "+f.name+"…");
+  try{ const r=await fetch("/api/upload?name="+encodeURIComponent(f.name),{method:"POST",headers:{"X-Token":TOKEN},body:await f.arrayBuffer()}); const j=await r.json(); if(j.error) toast(j.error); }catch(x){ toast("Không mở được file") }
+  await poll(); });
+async function addLinks(){ const v=$("#q").value.trim(); if(!v) return; const j=await act("/api/add_links",{links:v,name:$("#qn").value.trim(),start:true}); if(j&&!j.error){$("#q").value="";$("#qn").value="";go("list")} }
+$("#b-add").onclick=addLinks; $("#q").onkeydown=$("#qn").onkeydown=e=>{if(e.key==="Enter")addLinks()};
+function setF(f){FLT=f;$$("#flt button").forEach(b=>b.classList.toggle("on",b.dataset.f===f));draw()}
+$$("#flt button").forEach(b=>b.onclick=()=>setF(b.dataset.f));
+$("#fq").oninput=$("#fsheet").onchange=draw;
+$("#mh").onchange=e=>act("/api/settings",{max_height:+e.target.value});
+
+const LBL={pending:"Chờ tải",running:"Đang tải",done:"Đã tải",exists:"Đã có sẵn",error:"Lỗi"};
+function grp(s){return s==="error"?"error":(s==="done"||s==="exists")?"ok":"todo"}
+function draw(){
+  if(!ST) return;
+  const q=$("#fq").value.trim().toLowerCase(), sh=$("#fsheet").value;
+  const rows=ST.items.filter(i=>(FLT==="all"||(FLT==="suspect"?!!i.suspect:grp(i.status)===FLT))&&(!sh||i.sheet===sh)&&(!q||i.name.toLowerCase().includes(q)||i.link.toLowerCase().includes(q)));
+  $("#empty").style.display=rows.length?"none":"block";
+  $("#empty").textContent=ST.items.length?"Không có link nào khớp bộ lọc.":"Chưa có link nào. Mở file Excel hoặc dán link ở Trang chủ.";
+  $("#tb").innerHTML=rows.map(i=>{
+    const st=`<span class="st ${i.status}">${LBL[i.status]}${i.status==="running"&&i.pct?` ${i.pct}%`:""}</span>`+(i.status==="running"?`<div class="mini"><i style="width:${i.pct||3}%"></i></div>`:"");
+    const note=i.suspect?i.suspect:i.status==="error"?i.error:(i.status==="done"&&i.method&&i.method!=="yt-dlp"?"Lấy bằng: "+i.method:"");
+    const btn=i.status==="error"?`<button class="btn sm" data-retry="${i.id}" ${ST.running?"disabled":""}>Thử lại</button>`:(i.file?`<button class="btn sm" data-open="item" data-id="${i.id}">Mở</button>`:"");
+    return `<tr><td title="${esc(i.sheet)}">${esc(i.sheet)}</td><td class="nm">${esc(i.name)}</td><td><a href="${esc(i.link)}" target="_blank" rel="noopener" title="${esc(i.link)}">${esc(i.link.replace(/^https?:\/\/(www\.)?/,""))}</a></td><td>${st}</td><td class="note ${i.status==="error"||i.suspect?"er":""}" title="${esc(note)}">${esc(note.length>190?note.slice(0,190)+"…":note)}</td><td>${btn}</td></tr>`;
+  }).join("");
+}
+function render(){
+  const c=ST.count, n=ST.items.length, ok=(c.done||0)+(c.exists||0), er=c.error||0, todo=(c.pending||0)+(c.running||0);
+  // thanh bên
+  const nb=$("#nb-all"); nb.style.display=n?"":"none"; nb.textContent=er?er+" lỗi":n; nb.classList.toggle("g",!er);
+  const nk=$("#nb-ck"); nk.style.display=ST.cookies.length?"":"none"; nk.textContent=ST.cookies.length;
+  const e=ST.env, d=(ok,wait)=>`<span class="dot ${wait?"wait":ok?"ok":"bad"}"></span>`;
+  $("#envbox").innerHTML=!e.ready?`${d(0,1)}Đang kiểm tra thành phần…`:
+    `<b style="color:var(--text)">Phiên bản ${esc(ST.version)}</b><br>${d(e.ytdlp)}yt-dlp ${esc(e.ytdlp||"thiếu")}<br>${d(e.browser==="ok")}Dò bằng trình duyệt<br>${d(e.curl)}Giả lập Chrome<br>${d(e.ffmpeg)}ffmpeg`;
+  $("#envcard").innerHTML=`<b>Thành phần</b>`+(!e.ready?`<div class="kv"><div>Đang kiểm tra và cài thành phần còn thiếu…</div></div>`:[
+    ["Python",e.python,true,""],
+    ["yt-dlp (bộ tải chính)",e.ytdlp||"Chưa cài được",!!e.ytdlp,"Kiểm tra kết nối mạng rồi mở lại tool."],
+    ["Dò video bằng trình duyệt ẩn",e.browser==="ok"?"Sẵn sàng":e.browser,e.browser==="ok","Cần cho báo điện tử và Threads. Nếu Python quá mới, cài Python 3.12."],
+    ["Giả lập Chrome (curl_cffi)",e.curl?"Sẵn sàng":"Chưa cài được",e.curl,"Cần cho trang dùng Cloudflare và LinkedIn."],
+    ["ffmpeg (ghép hình và tiếng)",e.ffmpeg?"Sẵn sàng":"Không có",e.ffmpeg,"Thiếu thì YouTube chỉ tải được tối đa 720p."],
+  ].map(r=>`<div class="kv"><div><b>${r[0]}</b>${r[2]?"":`<small>${r[3]}</small>`}</div><span style="color:${r[2]?"var(--ok)":"var(--err)"};font-weight:600;max-width:50%;text-align:right">${esc(r[1])}</span></div>`).join(""));
+  const bn=$("#banner");
+  if(e.ready&&!e.ytdlp){bn.style.display="flex";$("#banner-t").textContent="Thiếu yt-dlp nên chưa tải được. Kiểm tra kết nối mạng rồi mở lại tool."}
+  else if(e.ready&&e.browser!=="ok"){bn.style.display="flex";$("#banner-t").textContent="Dò video bằng trình duyệt chưa chạy: video nhúng trong báo điện tử có thể không tải được."}
+  else bn.style.display="none";
+  // trang chủ
+  $("#loaded").style.display=n?"block":"none";
+  if(n){
+    $("#ld-name").textContent=ST.excel?ST.excel.split(/[\\/]/).pop():"Link lẻ";
+    const sh={}; ST.items.forEach(i=>sh[i.sheet]=(sh[i.sheet]||0)+1);
+    $("#ld-sheets").innerHTML=Object.entries(sh).map(([k,v])=>`<span class="chip">${esc(k)} · ${v}</span>`).join("");
+    $("#t-all").textContent=n;$("#t-ok").textContent=ok;$("#t-wait").textContent=todo;$("#t-err").textContent=er;
+    $("#ld-out").textContent="‎"+ST.outdir; $("#pg").style.width=(n?(ok+er)*100/n:0)+"%";
+    const cur=ST.items.find(i=>i.id===ST.cur);
+    $("#ld-now").textContent=ST.stopping?"Đang dừng sau bước hiện tại…":cur?`Đang tải ${cur.sheet} / ${cur.name}`:"";
+  }
+  $("#set-out").textContent=ST.outdir;
+  if(document.activeElement!==$("#mh")) $("#mh").value=ST.max_height;
+  // nút
+  const can=!ST.running&&(c.pending||er);
+  ["#b-start","#b-start2"].forEach(s=>{$(s).style.display=ST.running?"none":"";$(s).disabled=!can;$(s).textContent=ok||er?"Tải tiếp":"Bắt đầu tải"});
+  ["#b-stop","#b-stop2"].forEach(s=>{$(s).style.display=ST.running?"":"none";$(s).disabled=ST.stopping});
+  $("#b-retry").disabled=ST.running||!er; $("#b-rep").style.display=ST.report?"":"none";
+  // danh sách
+  const sus=ST.suspect||0, db=$("#dupbar");
+  db.style.display=sus&&!ST.running?"flex":"none"; $("#dup-t").textContent=`${sus} file nghi tải sai (trùng nhau hoặc quá nhỏ).`;
+  $("#f-sus").style.display=sus?"":"none"; if(!sus&&FLT==="suspect") FLT="all";
+  const cnt={all:n,todo,ok,error:er,suspect:sus}; $$("#flt button").forEach(b=>b.querySelector("span").textContent=cnt[b.dataset.f]||"");
+  const fs=$("#fsheet"), names=[...new Set(ST.items.map(i=>i.sheet))], sig=names.join("|");
+  if(fs.dataset.sig!==sig){const v=fs.value;fs.innerHTML=`<option value="">Mọi sheet</option>`+names.map(x=>`<option>${esc(x)}</option>`).join("");fs.value=names.includes(v)?v:"";fs.dataset.sig=sig}
+  draw();
+  // cookie
+  $("#cklist").innerHTML=ST.cookies.length?ST.cookies.map(k=>`<div class="kv"><div><b>${esc(k.name)}</b><small>${k.lines?esc(k.sites.join(", ")):"Không đúng định dạng cookies.txt (Netscape). Hãy xuất lại bằng tiện ích."}</small></div><span style="font-weight:600;color:${k.lines?"var(--ok)":"var(--err)"}">${k.lines?k.lines+" cookie":"Không đọc được"}</span></div>`).join(""):`<div class="kv"><div style="color:var(--muted)">Chưa có file cookie nào.</div></div>`;
+  // nhật ký
+  const lb=$("#logbox"), atEnd=lb.scrollTop+lb.clientHeight>=lb.scrollHeight-30; lb.textContent=ST.log.join("\n"); if(atEnd) lb.scrollTop=lb.scrollHeight;
+  // thanh dưới
+  const ft=$("#foot"), fm=$("#f-msg");
+  if(ST.running){ft.style.display="flex";fm.className="msg";fm.textContent=`Đang tải… ${ok+er}/${n}`+(er?` · ${er} lỗi`:"");$("#f-retry").style.display="none";$("#f-view").style.display=er?"":"none"}
+  else if(er){ft.style.display="flex";fm.className="msg er";fm.textContent=`${er} link lỗi`;$("#f-retry").style.display="";$("#f-view").style.display=""}
+  else ft.style.display="none";
+}
+async function poll(){ const j=await api("/api/state"); if(j&&!j.error){ST=j;render()} }
+poll(); setInterval(poll,1000);
+window.addEventListener("pagehide",()=>{try{navigator.sendBeacon("/api/bye?t="+TOKEN)}catch(e){}});
+</script>
+</body>
+</html>

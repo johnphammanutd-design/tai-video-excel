@@ -1,0 +1,12 @@
+# Du lieu rieng - KHONG BAO GIO dua len kho
+cookies/
+_tam/
+du_lieu/
+CLAUDE.md
+
+# File sinh ra khi chay / dong goi
+__pycache__/
+*.pyc
+dong_goi_exe/build/
+dong_goi_exe/*.exe
+dong_goi_exe/*.zip
