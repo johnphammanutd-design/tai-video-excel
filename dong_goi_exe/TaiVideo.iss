@@ -22,6 +22,8 @@ SolidCompression=yes
 WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
+; Tool chạy bằng pythonw (không có cửa sổ riêng) nên Windows không tự đóng được -> bộ cài tự tắt (xem [Code])
+CloseApplications=no
 
 [Tasks]
 Name: "desktopicon"; Description: "Tạo biểu tượng trên Desktop"; GroupDescription: "Biểu tượng:"
@@ -36,6 +38,32 @@ Name: "{userdesktop}\{#TenApp}"; Filename: "{app}\python\pythonw.exe"; Parameter
 
 [Run]
 Filename: "{app}\python\pythonw.exe"; Parameters: """{app}\app\giao_dien.py"""; WorkingDir: "{app}\app"; Description: "Mở {#TenApp}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+// Tắt bản tool đang chạy từ thư mục cài đặt (kể cả khi cửa sổ đã đóng nhưng tool chưa kịp thoát),
+// nếu không bộ cài báo "unable to automatically close all applications".
+procedure TatToolDangChay();
+var
+  R: Integer;
+begin
+  Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+    '-NoProfile -ExecutionPolicy Bypass -Command "Get-Process | Where-Object { $_.Path -like ''' +
+    ExpandConstant('{app}') + '\*'' } | Stop-Process -Force"',
+    '', SW_HIDE, ewWaitUntilTerminated, R);
+  Sleep(800);
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  TatToolDangChay();
+  Result := '';
+end;
+
+function InitializeUninstall(): Boolean;
+begin
+  TatToolDangChay();
+  Result := True;
+end;
 
 [UninstallDelete]
 ; Xóa cả thư viện đã tự cập nhật, file tạm và cookie của người dùng
