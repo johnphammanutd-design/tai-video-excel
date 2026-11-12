@@ -36,6 +36,9 @@ COOKIES_FROM_BROWSER = None
 # Chất lượng tối đa (chiều cao, pixel). None = cao nhất có thể.
 MAX_HEIGHT = None
 
+# Tự chuyển video về MP4 mã H.264 (Premiere và Windows đọc được ngay). False = giữ nguyên file tải về.
+CHUYEN_H264 = True
+
 # Từ khóa nhận diện tiêu đề cột (không phân biệt hoa thường/dấu)
 LINK_HEADER_KEYS = ["link video", "link", "url"]
 NAME_HEADER_KEYS = ["dat ten file", "ten file", "file name", "filename"]
@@ -44,7 +47,7 @@ FALLBACK_LINK_COL = 3
 FALLBACK_NAME_COL = 4
 # ================================================================
 
-PHIEN_BAN = "12"
+PHIEN_BAN = "13"
 SCRIPT_DIR = Path(__file__).resolve().parent
 VIDEO_EXTS = {".mp4", ".mkv", ".webm", ".mov", ".m4v", ".flv", ".avi"}
 
@@ -509,6 +512,87 @@ def kiem_tra_luong(f: Path, ffmpeg_dir):
     # ảnh bìa nhúng trong file nhạc (attached pic) không tính là hình
     co_hinh = any("Video:" in d and "attached pic" not in d for d in txt.splitlines() if "Stream #" in d)
     return co_hinh, bool(re.search(r"Stream #[^\n]*Audio:", txt)), giay
+
+
+def doc_ma_video(f: Path, ffmpeg_dir):
+    """Trả về (mã hình, kiểu điểm ảnh, mã tiếng) của file, vd. ("hevc", "yuv420p", "aac"); None nếu không đọc được."""
+    import subprocess
+
+    if not ffmpeg_dir:
+        return None
+    exe = str(Path(ffmpeg_dir) / ("ffmpeg.exe" if os.name == "nt" else "ffmpeg"))
+    try:
+        r = subprocess.run([exe, "-hide_banner", "-i", str(f)], capture_output=True, timeout=60,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        txt = (r.stderr or b"").decode("utf-8", "ignore")
+    except Exception:
+        return None
+    hinh = next((d for d in txt.splitlines() if "Stream #" in d and "Video:" in d and "attached pic" not in d), None)
+    if not hinh:
+        return None
+    m = re.search(r"Video:\s*(\w+)", hinh)
+    # kiểu điểm ảnh là mục đầu tiên sau dấu phẩy nằm NGOÀI ngoặc, vd. "hevc (Main) (hvc1 / 0x31637668), yuv420p(tv), ..."
+    sau = re.sub(r"\([^()]*\)", "", hinh.split("Video:", 1)[1])
+    p = re.search(r",\s*(\w+)", sau)
+    a = re.search(r"Stream #[^\n]*Audio:\s*(\w+)", txt)
+    return (m.group(1).lower() if m else "", p.group(1).lower() if p else "", a.group(1).lower() if a else "")
+
+
+def can_chuyen_h264(f: Path, ffmpeg_dir):
+    """Premiere và Windows chỉ chắc chắn đọc được MP4 chứa hình H.264 8-bit. Trả về "" nếu file đã ổn,
+    "ghep" nếu chỉ cần đổi vỏ file sang MP4, "ma" nếu phải mã hóa lại hình."""
+    if not (CHUYEN_H264 and ffmpeg_dir):
+        return ""
+    ma = doc_ma_video(f, ffmpeg_dir)
+    if not ma:
+        return ""
+    if ma[0] != "h264" or ma[1] not in ("yuv420p", "yuvj420p"):
+        return "ma"
+    if f.suffix.lower() not in (".mp4", ".mov", ".m4v") or ma[2] not in ("", "aac", "mp3"):
+        return "ghep"
+    return ""
+
+
+def dam_bao_h264(f: Path, ffmpeg_dir):
+    """Chuyển file về MP4 (H.264 + AAC) nếu cần. Trả về (file, ghi chú). Chuyển hỏng thì GIỮ file gốc."""
+    import subprocess
+
+    kieu = can_chuyen_h264(f, ffmpeg_dir)
+    if not kieu:
+        return f, ""
+    ma = doc_ma_video(f, ffmpeg_dir)
+    exe = str(Path(ffmpeg_dir) / ("ffmpeg.exe" if os.name == "nt" else "ffmpeg"))
+    tam = f.with_name(f.stem + ".dang_chuyen.mp4")
+    dich = f.with_suffix(".mp4")
+    lenh = [exe, "-hide_banner", "-loglevel", "error", "-y", "-i", str(f), "-map", "0:v:0", "-map", "0:a:0?",
+            "-map_metadata", "0"]
+    if kieu == "ma":
+        print(f"    File tải về dùng mã hình {ma[0].upper()} (Premiere/Windows thường không đọc được) -> đang chuyển sang H.264...")
+        lenh += ["-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p",
+                 "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2"]
+    else:
+        print("    Đổi vỏ file sang MP4 (không mã hóa lại hình)...")
+        lenh += ["-c:v", "copy"]
+    lenh += (["-c:a", "copy"] if ma[2] in ("aac", "mp3") else ["-c:a", "aac", "-b:a", "192k"])
+    lenh += ["-movflags", "+faststart", "-f", "mp4", str(tam)]
+    try:
+        r = subprocess.run(lenh, capture_output=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        kt = kiem_tra_luong(tam, ffmpeg_dir) if r.returncode == 0 and tam.exists() else None
+        if not kt or not kt[0]:
+            raise RuntimeError((r.stderr or b"").decode("utf-8", "ignore")[-200:] or "file ra không có hình")
+        goc = kiem_tra_luong(f, ffmpeg_dir)
+        if goc and goc[2] > 2 and abs(kt[2] - goc[2]) > max(2.0, goc[2] * 0.05):
+            raise RuntimeError(f"thời lượng sau khi chuyển lệch ({kt[2]:.0f}s so với {goc[2]:.0f}s)")
+        f.unlink()
+        tam.replace(dich)
+        return dich, ("đã chuyển " + ma[0].upper() + " sang H.264" if kieu == "ma" else "đã đổi vỏ sang MP4")
+    except Exception as e:
+        try:
+            tam.unlink()
+        except Exception:
+            pass
+        print(f"    Không chuyển được sang H.264, giữ file gốc ({str(e).strip()[-160:]})")
+        return f, ""
 
 
 GHI_CHU_NGUON = {}     # link nguồn -> cảnh báo ghi vào báo cáo
@@ -1192,6 +1276,13 @@ def ytdlp_tai(url, outdir: Path, name, ffmpeg_dir, referer=None, ep_mp4=False, c
 
 
 def tai_mot(item, outdir: Path, ffmpeg_dir):
+    """Tải một link rồi chuyển file về H.264 nếu cần (để dùng được trong Premiere)."""
+    f, cach = _tai_mot_proxy(item, outdir, ffmpeg_dir)
+    f, ghi_chu = dam_bao_h264(f, ffmpeg_dir)
+    return f, (f"{cach} [{ghi_chu}]" if ghi_chu else cach)
+
+
+def _tai_mot_proxy(item, outdir: Path, ffmpeg_dir):
     """Tải một link, có tính đến proxy: tắt -> đi thẳng; "luon" -> luôn qua proxy;
     "khi_loi" -> đi thẳng trước, chỉ khi lỗi do mạng/IP mới thử lại qua proxy (tiết kiệm dung lượng proxy)."""
     ds = PROXY_DS if PROXY_CHE_DO != "tat" else []
@@ -1459,8 +1550,9 @@ def main():
             existed = da_tai(thu_muc, it["name"])
             if existed:
                 print(f"    Đã có sẵn ({existed.name}), bỏ qua.")
+                existed, ghi_chu = dam_bao_h264(existed, ffmpeg_dir)
                 skip += 1
-                ket_qua.append([ten_sheet, it["row"], it["name"], it["link"], "Đã có sẵn", existed.name, "", ""])
+                ket_qua.append([ten_sheet, it["row"], it["name"], it["link"], "Đã có sẵn", existed.name, ghi_chu, ""])
                 continue
             try:
                 f, cach = tai_mot(it, thu_muc, ffmpeg_dir)

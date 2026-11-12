@@ -26,6 +26,11 @@ CÔNG CỤ TẢI VIDEO HÀNG LOẠT TỪ FILE EXCEL
    - Số link tải cùng lúc (mặc định 3): tool tải vài link song song cho nhanh, nhưng mỗi
      nền tảng (TikTok, Facebook, Douyin...) vẫn chỉ tải một link một lúc để không bị chặn.
      Máy yếu hoặc hay gặp lỗi thì chọn 1.
+   - Tự chuyển video về H.264 (mặc định bật): một số trang (TikTok, Douyin, YouTube 4K...) trả
+     video mã HEVC/VP9/AV1, đưa vào Premiere chỉ có tiếng không có hình, Windows đòi mua codec.
+     Tool tự chuyển các file đó sang MP4 H.264 ngay sau khi tải, không cần HandBrake. File đã
+     là H.264 được giữ nguyên. File tải từ bản cũ: mở lại đúng file Excel đó rồi bấm tải, tool
+     không tải lại mà chỉ chuyển những file cần chuyển.
    - Proxy HTTP (Cài đặt > Proxy, không bắt buộc): mỗi dòng một proxy, dạng
      domain:port:user:pass. Có 3 chế độ: Tắt; "Chỉ khi bị chặn" (tải thẳng trước, link
      nào lỗi do mạng hoặc bị chặn địa chỉ mới đi qua proxy - đỡ tốn dung lượng proxy);

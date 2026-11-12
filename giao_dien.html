@@ -245,6 +245,9 @@ code{background:#eef2f0;border-radius:5px;padding:1px 6px;font-family:Consolas,m
           <div class="kv"><div><b>Chất lượng tối đa</b><small>Giảm xuống nếu muốn file nhẹ hơn.</small></div>
             <select id="mh" style="border:1px solid var(--line);border-radius:8px;padding:6px 10px;font:inherit">
               <option value="0">Cao nhất có thể</option><option value="2160">2160p (4K)</option><option value="1080">1080p</option><option value="720">720p</option><option value="480">480p</option></select></div>
+          <div class="kv"><div><b>Tự chuyển video về H.264</b><small>Một số trang (TikTok, Douyin, YouTube 4K…) trả video mã HEVC/VP9/AV1 mà Premiere và Windows không đọc được hình. Bật mục này thì tool tự chuyển các file đó sang MP4 H.264; file đã là H.264 được giữ nguyên.</small></div>
+            <select id="hc" style="border:1px solid var(--line);border-radius:8px;padding:6px 10px;font:inherit">
+              <option value="1">Bật (khuyên dùng)</option><option value="0">Tắt</option></select></div>
           <div class="kv"><div><b>Số link tải cùng lúc</b><small>Mỗi nền tảng (TikTok, Facebook…) vẫn chỉ tải một link một lúc để tránh bị chặn. Chọn 1 nếu máy yếu hoặc hay gặp lỗi.</small></div>
             <select id="th" style="border:1px solid var(--line);border-radius:8px;padding:6px 10px;font:inherit">
               <option value="1">1 (lần lượt)</option><option value="2">2</option><option value="3">3 (khuyên dùng)</option><option value="4">4</option><option value="5">5</option><option value="6">6</option></select></div>
@@ -315,6 +318,7 @@ function setF(f){FLT=f;$$("#flt button").forEach(b=>b.classList.toggle("on",b.da
 $$("#flt button").forEach(b=>b.onclick=()=>setF(b.dataset.f));
 $("#fq").oninput=$("#fsheet").onchange=draw;
 $("#mh").onchange=e=>act("/api/settings",{max_height:+e.target.value});
+$("#hc").onchange=e=>act("/api/settings",{h264:e.target.value==="1"});
 $("#th").onchange=e=>act("/api/settings",{threads:+e.target.value});
 let PXD=false;   // người dùng đang sửa ô proxy -> không ghi đè bằng giá trị đã lưu
 $("#px-text").oninput=$("#px-mode").onchange=()=>{PXD=true};
@@ -376,6 +380,7 @@ function render(){
   }
   $("#set-out").textContent=ST.outdir;
   if(document.activeElement!==$("#mh")) $("#mh").value=ST.max_height;
+  if(document.activeElement!==$("#hc")) $("#hc").value=ST.h264?"1":"0";
   if(document.activeElement!==$("#th")) $("#th").value=ST.threads;
   if(!PXD&&document.activeElement!==$("#px-text")){$("#px-mode").value=ST.proxy.mode;$("#px-text").value=ST.proxy.text}
   if(ST.restarting&&!render.dong){render.dong=1;setTimeout(()=>{try{window.close()}catch(x){}},2500)}

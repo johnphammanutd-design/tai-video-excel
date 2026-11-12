@@ -1,11 +1,11 @@
 {
-  "phien_ban": "12",
-  "the": "v12",
-  "ghi_chu": "Thêm tùy chọn proxy HTTP (Cài đặt > Proxy): tải qua proxy khi bị chặn hoặc luôn dùng proxy",
+  "phien_ban": "13",
+  "the": "v13",
+  "ghi_chu": "Tự chuyển video HEVC/VP9/AV1 sang MP4 H.264 để dùng được trong Premiere và Windows",
   "files": {
-    "tai_video.py": "eeca3bcfd153f2f26c29dce386359459a66676e754eebd81fe2ec6a230accb32",
-    "giao_dien.py": "25efa893cf96db6162731c9061607402d6150e86c9bf874efb5ef2ba9c999bd6",
-    "giao_dien.html": "dd4152633158f6e8c6cae344d8e246eb88b6ca1fbe9d91be7dafa6dc7966b093",
-    "HUONG_DAN.txt": "823836e2db510884a1799490d7638f7341ee852866b93c50402f98d7e32c7aa2"
+    "tai_video.py": "01f5a2ad76072d9350c0138d77b377d4dda272ccb7ed922e7fa8d1df10114cbf",
+    "giao_dien.py": "a2aa7c667ce60d69f34fa14c58dd85142f69b8eb23a9717ca07b95041a22c064",
+    "giao_dien.html": "0407dcfe41d084c3a047cbede61e0eeeb0fac3b367b7547f297431f39a1096ec",
+    "HUONG_DAN.txt": "fa7eb1ffb077f62dfb59cad20bffdf9259bea158db5c854345e26094475ace79"
   }
 }
