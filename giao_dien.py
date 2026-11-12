@@ -373,17 +373,63 @@ def nap_cai_dat():
         d = json.loads(_file_cai_dat().read_text(encoding="utf-8"))
         S["luong"] = max(1, min(LUONG_TOI_DA, int(d.get("luong") or 3)))
         T.MAX_HEIGHT = int(d.get("max_height") or 0) or None
+        S["proxy_text"] = str(d.get("proxy") or "")
+        try:
+            T.dat_proxy(S["proxy_text"], str(d.get("proxy_che_do") or "tat"))
+        except ValueError:
+            T.dat_proxy("", "tat")
     except Exception:
         pass
 
 
 def luu_cai_dat():
+    # File này nằm trong _tam trên máy người dùng (không vào bộ cài, không lên GitHub) vì có tài khoản proxy
     try:
         T.TAM_DIR.mkdir(exist_ok=True)
-        _file_cai_dat().write_text(json.dumps({"luong": S["luong"], "max_height": T.MAX_HEIGHT or 0}),
-                                   encoding="utf-8")
+        _file_cai_dat().write_text(json.dumps({
+            "luong": S["luong"], "max_height": T.MAX_HEIGHT or 0,
+            "proxy": S.get("proxy_text", ""), "proxy_che_do": T.PROXY_CHE_DO}), encoding="utf-8")
     except Exception:
         pass
+
+
+def dat_proxy(van_ban, che_do):
+    with LOCK:
+        if S["running"]:
+            raise ValueError("Đang tải, hãy dừng hoặc chờ xong rồi đổi proxy.")
+    T.dat_proxy(van_ban, che_do)   # báo lỗi ValueError nếu dòng nào sai định dạng
+    S["proxy_text"] = "\n".join(d.strip() for d in (van_ban or "").splitlines() if d.strip())
+    luu_cai_dat()
+    nhan = {"tat": "tắt", "khi_loi": "chỉ dùng khi tải thẳng bị chặn", "luon": "luôn dùng"}[T.PROXY_CHE_DO]
+    print(f"Proxy: {nhan}, {len(T.PROXY_DS)} proxy.")
+
+
+def thu_proxy(van_ban):
+    """Gọi thử một trang nhỏ qua từng proxy để biết proxy có chạy không và ra mạng bằng địa chỉ nào."""
+    import urllib.request
+
+    ds = [T.phan_tich_proxy(d) for d in (van_ban or "").splitlines() if d.strip()]
+    if not ds:
+        raise ValueError("Chưa nhập proxy nào.")
+    kq = []
+    for p in ds[:10]:
+        try:
+            mo = urllib.request.build_opener(urllib.request.ProxyHandler({"http": p, "https": p}))
+            with mo.open(os.environ.get("TAIVIDEO_IP_URL") or "https://api.ipify.org", timeout=20) as r:
+                ip = r.read(100).decode("ascii", "ignore").strip()
+            kq.append(f"{T.che_proxy(p)}: CHẠY, ra mạng bằng địa chỉ {ip}")
+        except Exception as e:
+            loi = str(e)
+            if "407" in loi:
+                loi = "sai tài khoản hoặc mật khẩu proxy (407)"
+            elif "10061" in loi or "refused" in loi.lower():
+                loi = "không kết nối được tới proxy (sai địa chỉ/cổng, hoặc proxy đang tắt)"
+            elif "timed out" in loi.lower():
+                loi = "proxy không trả lời (quá thời gian chờ)"
+            kq.append(f"{T.che_proxy(p)}: LỖI - {loi[:90]}")
+    for d in kq:
+        print("Thử proxy -> " + d)
+    return kq
 
 
 # ======================= TỰ KIỂM TRA VÀ CẬP NHẬT BẢN MỚI =======================
@@ -636,6 +682,7 @@ def trang_thai(log_tu=0):
             "log": LOG[-300:], "cur": S["cur"]["id"] if S["cur"] else None, "version": T.PHIEN_BAN,
             "suspect": sum(1 for i in S["items"] if i.get("suspect")),
             "threads": S["luong"], "threads_max": LUONG_TOI_DA,
+            "proxy": {"mode": T.PROXY_CHE_DO, "text": S.get("proxy_text", ""), "count": len(T.PROXY_DS)},
             "update": ({"version": S["cap_nhat"]["moi"], "note": S["cap_nhat"]["ghi_chu"]} if S["cap_nhat"] else None),
             "restarting": bool(S.get("thoat")),
         }
@@ -750,6 +797,10 @@ class H(BaseHTTPRequestHandler):
                 luu_cai_dat()
             elif a == "/api/update":
                 cap_nhat_tool()
+            elif a == "/api/proxy":
+                dat_proxy(d.get("text", ""), d.get("mode", "tat"))
+            elif a == "/api/proxy_test":
+                return self._gui(200, {"ok": True, "results": thu_proxy(d.get("text", ""))})
             else:
                 return self._gui(404, {"error": "not found"})
             self._gui(200, {"ok": True})

@@ -251,6 +251,17 @@ code{background:#eef2f0;border-radius:5px;padding:1px 6px;font-family:Consolas,m
           <div class="kv"><div><b>Thư mục lưu video</b><small id="set-out"></small></div><button class="btn" id="b-out2">Đổi thư mục</button></div>
         </div>
         <div class="card" id="envcard"></div>
+        <div class="card">
+          <b>Proxy HTTP (tùy chọn)</b>
+          <div class="kv"><div><b>Cách dùng</b><small>“Chỉ khi bị chặn”: tải thẳng trước, link nào lỗi do mạng hoặc bị chặn địa chỉ mới đi qua proxy, đỡ tốn dung lượng proxy. Proxy không giúp được link bắt đăng nhập.</small></div>
+            <select id="px-mode" style="border:1px solid var(--line);border-radius:8px;padding:6px 10px;font:inherit">
+              <option value="tat">Tắt</option><option value="khi_loi">Chỉ khi bị chặn (khuyên dùng)</option><option value="luon">Luôn dùng proxy</option></select></div>
+          <div style="margin-top:10px"><small style="color:var(--muted)">Mỗi dòng một proxy, dạng <code>domain:port:user:pass</code>. Nhiều dòng thì các link lần lượt dùng từng proxy.</small>
+            <textarea id="px-text" rows="3" spellcheck="false" autocomplete="off" placeholder="proxy.vidu.vn:8080:taikhoan:matkhau" style="width:100%;box-sizing:border-box;margin-top:6px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:12.5px ui-monospace,Consolas,monospace;resize:vertical"></textarea></div>
+          <div class="row" style="margin-top:10px"><button class="btn pri" id="px-save">Lưu</button><button class="btn" id="px-test">Kiểm tra proxy</button>
+            <small style="color:var(--muted)">Tài khoản proxy chỉ lưu trên máy này.</small></div>
+          <div id="px-out" style="margin-top:8px;font-size:12.5px;white-space:pre-wrap;color:var(--muted)"></div>
+        </div>
       </div>
     </section>
 
@@ -305,6 +316,10 @@ $$("#flt button").forEach(b=>b.onclick=()=>setF(b.dataset.f));
 $("#fq").oninput=$("#fsheet").onchange=draw;
 $("#mh").onchange=e=>act("/api/settings",{max_height:+e.target.value});
 $("#th").onchange=e=>act("/api/settings",{threads:+e.target.value});
+let PXD=false;   // người dùng đang sửa ô proxy -> không ghi đè bằng giá trị đã lưu
+$("#px-text").oninput=$("#px-mode").onchange=()=>{PXD=true};
+$("#px-save").onclick=async()=>{ const j=await act("/api/proxy",{mode:$("#px-mode").value,text:$("#px-text").value}); if(j&&!j.error){PXD=false;$("#px-out").textContent="Đã lưu.";} };
+$("#px-test").onclick=async()=>{ $("#px-out").textContent="Đang kiểm tra…"; const j=await api("/api/proxy_test",{text:$("#px-text").value}); $("#px-out").textContent=j.results?j.results.join("\n"):(j.error||""); };
 document.addEventListener("click",async e=>{
   if(!e.target.closest("#b-update")) return;
   if(ST&&ST.running){toast("Đang tải, hãy dừng hoặc chờ xong rồi cập nhật.");return}
@@ -362,6 +377,7 @@ function render(){
   $("#set-out").textContent=ST.outdir;
   if(document.activeElement!==$("#mh")) $("#mh").value=ST.max_height;
   if(document.activeElement!==$("#th")) $("#th").value=ST.threads;
+  if(!PXD&&document.activeElement!==$("#px-text")){$("#px-mode").value=ST.proxy.mode;$("#px-text").value=ST.proxy.text}
   if(ST.restarting&&!render.dong){render.dong=1;setTimeout(()=>{try{window.close()}catch(x){}},2500)}
   // nút
   const can=!ST.running&&(c.pending||er);

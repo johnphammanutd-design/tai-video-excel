@@ -44,7 +44,7 @@ FALLBACK_LINK_COL = 3
 FALLBACK_NAME_COL = 4
 # ================================================================
 
-PHIEN_BAN = "11"
+PHIEN_BAN = "12"
 SCRIPT_DIR = Path(__file__).resolve().parent
 VIDEO_EXTS = {".mp4", ".mkv", ".webm", ".mov", ".m4v", ".flv", ".avi"}
 
@@ -241,6 +241,99 @@ def nen_tang(url: str) -> str:
     return ".".join(phan[-n:]) or "khac"
 
 
+# ----- Proxy HTTP (tùy chọn, đặt trong Cài đặt của giao diện) -----
+PROXY_DS = []            # danh sách proxy dạng "http://user:pass@may:cong"
+PROXY_CHE_DO = "tat"     # "tat" | "khi_loi" (tải thẳng trước, bị chặn mới đi proxy) | "luon"
+_TL = threading.local()  # .proxy = proxy mà luồng này đang dùng cho lần thử hiện tại (None = đi thẳng)
+_PROXY_LUOT = [0]
+# Lỗi do MẠNG/ĐỊA CHỈ IP (đổi đường đi có thể giúp). Lỗi cần đăng nhập, link sai... thì proxy không giúp được.
+_LOI_MANG = re.compile(r"ip address is blocked|not available in your country|geo.?restrict|failed to resolve|getaddrinfo|"
+                       r"\bssl\b|eof occurred|\b403\b|forbidden|cloudflare|timed? ?out|connection|\b429\b|too many requests|"
+                       r"rate.?limit|douyin không trả dữ liệu|blocked by network", re.I)
+
+
+def phan_tich_proxy(dong: str):
+    """Đọc 1 dòng proxy. Nhận: may:cong:user:pass | may:cong | user:pass@may:cong | http://...
+    Trả về "http://user:pass@may:cong" hoặc báo lỗi ValueError."""
+    from urllib.parse import quote, urlsplit
+
+    s = dong.strip()
+    if not s:
+        return None
+    if "://" in s:
+        sp = urlsplit(s)
+        if sp.scheme not in ("http", "https") or not sp.hostname or not sp.port:
+            raise ValueError(f"Proxy không hợp lệ (chỉ nhận proxy HTTP): {s[:40]}")
+        may, cong, user, mk = sp.hostname, sp.port, sp.username or "", sp.password or ""
+        from urllib.parse import unquote
+        user, mk = unquote(user), unquote(mk)
+    else:
+        phan = s.split(":", 3)
+        # may:cong:user:pass được xét TRƯỚC, vì mật khẩu có thể chứa ':' và '@'
+        if "@" in s and not (len(phan) == 4 and phan[1].isdigit()):
+            tk, s2 = s.rsplit("@", 1)
+            user, _, mk = tk.partition(":")
+            may, _, cong = s2.partition(":")
+        else:
+            if len(phan) not in (2, 4):
+                raise ValueError(f"Proxy phải có dạng may:cong:user:pass (hoặc may:cong): {s[:40]}")
+            may, cong = phan[0], phan[1]
+            user, mk = (phan[2], phan[3]) if len(phan) == 4 else ("", "")
+        if not may or not str(cong).isdigit():
+            raise ValueError(f"Proxy phải có dạng may:cong:user:pass (hoặc may:cong): {s[:40]}")
+    tk = f"{quote(user, safe='')}:{quote(mk, safe='')}@" if user else ""
+    return f"http://{tk}{may}:{int(cong)}"
+
+
+def che_proxy(p: str) -> str:
+    """Tên proxy để ghi nhật ký: không bao giờ in tài khoản/mật khẩu."""
+    return p.rsplit("@", 1)[-1].replace("http://", "") if p else ""
+
+
+def dat_proxy(van_ban: str, che_do: str):
+    """Đặt danh sách proxy (mỗi dòng một proxy) và chế độ dùng."""
+    global PROXY_DS, PROXY_CHE_DO
+    ds = [phan_tich_proxy(d) for d in (van_ban or "").splitlines() if d.strip()]
+    if che_do not in ("tat", "khi_loi", "luon"):
+        che_do = "tat"
+    if che_do != "tat" and not ds:
+        raise ValueError("Chưa nhập proxy nào.")
+    PROXY_DS, PROXY_CHE_DO = ds, che_do
+
+
+def proxy_hien_tai():
+    return getattr(_TL, "proxy", None)
+
+
+def _chon_proxy():
+    with _KHOA_COOKIE:
+        _PROXY_LUOT[0] += 1
+        return PROXY_DS[_PROXY_LUOT[0] % len(PROXY_DS)]
+
+
+def _mo_url(req, timeout):
+    """urlopen, đi qua proxy của luồng nếu đang có."""
+    import urllib.request
+
+    p = proxy_hien_tai()
+    if not p:
+        return urllib.request.urlopen(req, timeout=timeout)
+    return urllib.request.build_opener(urllib.request.ProxyHandler({"http": p, "https": p})).open(req, timeout=timeout)
+
+
+def _proxy_cho_trinh_duyet():
+    from urllib.parse import urlsplit, unquote
+
+    p = proxy_hien_tai()
+    if not p:
+        return None
+    sp = urlsplit(p)
+    d = {"server": f"http://{sp.hostname}:{sp.port}"}
+    if sp.username:
+        d["username"], d["password"] = unquote(sp.username), unquote(sp.password or "")
+    return d
+
+
 def _ban_sao_cookie(goc: str) -> str:
     """Mỗi luồng dùng một bản sao file cookie riêng: yt-dlp GHI ĐÈ file cookie khi tải xong,
     hai luồng dùng chung một file sẽ làm hỏng file."""
@@ -346,6 +439,8 @@ def tao_options(outdir: Path, name: str, ffmpeg_dir):
     }
     if ffmpeg_dir:
         opts["ffmpeg_location"] = ffmpeg_dir
+    if proxy_hien_tai():
+        opts["proxy"] = proxy_hien_tai()   # yt-dlp dùng cho cả giả lập Chrome và ffmpeg (video HLS)
     if PROGRESS_HOOK:
         opts["progress_hooks"] = [PROGRESS_HOOK]
     if COOKIE_GOP:
@@ -561,7 +656,7 @@ def douyin_id(url: str):
         return m.group(1)
     try:
         req = urllib.request.Request(url, headers={"User-Agent": UA_DI_DONG})
-        with urllib.request.urlopen(req, timeout=25) as r:
+        with _mo_url(req, 25) as r:
             m = re.search(mau, r.geturl())
             return m.group(1) if m else None
     except Exception:
@@ -741,7 +836,7 @@ def tai_truc_tiep(u: str, dest: Path, ua: str, referer: str):
 
     req = urllib.request.Request(u, headers={"User-Agent": ua, "Referer": referer, "Accept": "*/*"})
     tam = dest.with_name(dest.name + ".part")
-    with urllib.request.urlopen(req, timeout=60) as r:
+    with _mo_url(req, 60) as r:
         ct = (r.headers.get("Content-Type") or "").lower()
         if not (ct.startswith("video/") or "octet-stream" in ct):
             raise RuntimeError(f"máy chủ không trả về video ({ct or 'không rõ loại'})")
@@ -770,7 +865,7 @@ def tai_html(url: str, ua: str = None) -> str:
         req = urllib.request.Request(url, headers={
             "User-Agent": ua or UA, "Accept-Language": "vi-VN,vi;q=0.9,en;q=0.8",
             "Accept": "text/html,application/xhtml+xml,*/*;q=0.8"})
-        with urllib.request.urlopen(req, timeout=30) as r:
+        with _mo_url(req, 30) as r:
             raw = r.read()
             cs = r.headers.get_content_charset() or "utf-8"
         return raw.decode(cs, errors="ignore")
@@ -780,7 +875,9 @@ def tai_html(url: str, ua: str = None) -> str:
             from curl_cffi import requests as creq
         except ImportError:
             raise e1
-        r = creq.get(url, impersonate="chrome", timeout=30, headers={"Accept-Language": "vi-VN,vi;q=0.9,en;q=0.8"})
+        p = proxy_hien_tai()
+        r = creq.get(url, impersonate="chrome", timeout=30, headers={"Accept-Language": "vi-VN,vi;q=0.9,en;q=0.8"},
+                     proxies={"http": p, "https": p} if p else None)
         if r.status_code >= 400:
             raise RuntimeError(f"HTTP {r.status_code}")
         return r.text
@@ -797,7 +894,7 @@ def luat_dns(url: str):
     from urllib.parse import urlsplit
 
     may = (urlsplit(url).hostname or "").lower()
-    if not may.startswith("www."):
+    if not may.startswith("www.") or proxy_hien_tai():   # qua proxy thì proxy tự phân giải tên
         return []
     try:
         socket.gethostbyname(may)
@@ -813,7 +910,10 @@ def luat_dns(url: str):
 def mo_trinh_duyet(p, them=None):
     args = ["--autoplay-policy=no-user-gesture-required", "--mute-audio",
             "--disable-blink-features=AutomationControlled"] + list(them or [])
+    px = _proxy_cho_trinh_duyet()
     for kw in ({"channel": "msedge"}, {"channel": "chrome"}, {}):
+        if px:
+            kw = dict(kw, proxy=px)
         try:
             return p.chromium.launch(headless=True, args=args, **kw)
         except Exception:
@@ -910,6 +1010,10 @@ def do_trinh_duyet(url: str):
             return []
         try:
             ctx = browser.new_context(user_agent=UA, locale="vi-VN", viewport={"width": 1280, "height": 900})
+            if proxy_hien_tai():
+                # Trang báo tải hàng trăm ảnh/quảng cáo; qua proxy tính tiền theo dung lượng thì bỏ ảnh và phông chữ
+                ctx.route("**/*", lambda r: r.abort() if r.request.resource_type in ("image", "font")
+                          else r.continue_())
             page = ctx.new_page()
             page.on("response", on_response)
             try:
@@ -1088,6 +1192,36 @@ def ytdlp_tai(url, outdir: Path, name, ffmpeg_dir, referer=None, ep_mp4=False, c
 
 
 def tai_mot(item, outdir: Path, ffmpeg_dir):
+    """Tải một link, có tính đến proxy: tắt -> đi thẳng; "luon" -> luôn qua proxy;
+    "khi_loi" -> đi thẳng trước, chỉ khi lỗi do mạng/IP mới thử lại qua proxy (tiết kiệm dung lượng proxy)."""
+    ds = PROXY_DS if PROXY_CHE_DO != "tat" else []
+    _TL.proxy = None
+    if not ds:
+        return _tai_mot(item, outdir, ffmpeg_dir)
+    p = _chon_proxy()
+    try:
+        if PROXY_CHE_DO == "luon":
+            _TL.proxy = p
+            f, cach = _tai_mot(item, outdir, ffmpeg_dir)
+            return f, f"{cach} [qua proxy {che_proxy(p)}]"
+        try:
+            return _tai_mot(item, outdir, ffmpeg_dir)
+        except Exception as e:
+            if not _LOI_MANG.search(str(e)):
+                raise
+            print(f"    Tải thẳng không được (lỗi mạng/IP) -> thử lại qua proxy {che_proxy(p)}...")
+            don_rac(outdir, item["name"])
+            _TL.proxy = p
+            try:
+                f, cach = _tai_mot(item, outdir, ffmpeg_dir)
+                return f, f"{cach} [qua proxy {che_proxy(p)}]"
+            except Exception as e2:
+                raise RuntimeError(f"{e2} [đã thử cả đi thẳng lẫn qua proxy {che_proxy(p)}]")
+    finally:
+        _TL.proxy = None
+
+
+def _tai_mot(item, outdir: Path, ffmpeg_dir):
     """Trả về (file, cách lấy). Thử lần lượt:
     1) yt-dlp trực tiếp
     2) các cách sửa riêng: link Douyin rút gọn, đuôi file lạ, giả lập Chrome khi bị chặn
@@ -1222,7 +1356,11 @@ def rut_gon_loi(e: Exception) -> str:
     msg = re.sub(r"\x1b\[[0-9;]*m", "", str(e)).replace("ERROR: ", "").strip()
     low = msg.lower()
     goi_y = ""
-    if "failed to resolve" in low or "getaddrinfo" in low:
+    if "407" in low and "proxy" in low:
+        goi_y = " -> PROXY từ chối: sai tài khoản/mật khẩu proxy, hoặc proxy hết hạn (kiểm tra ở Cài đặt > Proxy)"
+    elif "unable to connect to proxy" in low or "tunnel connection failed" in low or "connect tunnel failed" in low:
+        goi_y = " -> Không đi qua được PROXY: proxy đang tắt hoặc không vào được trang này (bấm 'Kiểm tra proxy' ở Cài đặt)"
+    elif "failed to resolve" in low or "getaddrinfo" in low:
         goi_y = " -> MẠNG đang chặn tên miền này: đổi DNS sang 1.1.1.1 / 8.8.8.8 hoặc bật VPN (xem HUONG_DAN.txt mục 8)"
     elif "ip address is blocked" in low or "not available in your country" in low or "geo" in low:
         goi_y = " -> Video chặn theo quốc gia/IP: cần VPN"

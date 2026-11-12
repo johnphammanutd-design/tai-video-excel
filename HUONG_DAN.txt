@@ -26,6 +26,12 @@ CÔNG CỤ TẢI VIDEO HÀNG LOẠT TỪ FILE EXCEL
    - Số link tải cùng lúc (mặc định 3): tool tải vài link song song cho nhanh, nhưng mỗi
      nền tảng (TikTok, Facebook, Douyin...) vẫn chỉ tải một link một lúc để không bị chặn.
      Máy yếu hoặc hay gặp lỗi thì chọn 1.
+   - Proxy HTTP (Cài đặt > Proxy, không bắt buộc): mỗi dòng một proxy, dạng
+     domain:port:user:pass. Có 3 chế độ: Tắt; "Chỉ khi bị chặn" (tải thẳng trước, link
+     nào lỗi do mạng hoặc bị chặn địa chỉ mới đi qua proxy - đỡ tốn dung lượng proxy);
+     "Luôn dùng proxy". Bấm "Kiểm tra proxy" để biết proxy có chạy không. Proxy KHÔNG
+     giúp được link bắt đăng nhập. Tài khoản proxy chỉ lưu trên máy bạn (_tam\cai_dat.json).
+     Proxy chỉ áp dụng khi chạy bằng giao diện.
    - Bản mới: mỗi lần mở, tool hỏi kho GitHub của tool xem có bản mới không. Nếu có, góc
      dưới bên trái hiện "Có bản ... - Cập nhật". Bấm thì tool tải bản mới, kiểm tra file
      rồi tự mở lại. Bản cũ được giữ trong thư mục _tam\ban_cu_<số>. Tool không tự cập
