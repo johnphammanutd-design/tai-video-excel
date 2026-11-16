@@ -182,12 +182,35 @@ def nap_file_tai_len(ten, du_lieu):
     d = T.TAM_DIR / "tai_len"
     d.mkdir(parents=True, exist_ok=True)
     (d / ten).write_bytes(du_lieu)
-    nap_excel(str(d / ten))
+    tb = nap_excel(str(d / ten), nguon=f"{ten} (kéo thả vào cửa sổ)")
     with LOCK:
         # Không biết thư mục gốc của file -> lưu video vào Downloads\TaiVideo\<tên file>_video
         S["excel"] = ten
         S["outdir"] = tinh_thu_muc_luu()
         cap_nhat_thu_muc()
+    return tb
+
+
+def doc_lai_excel():
+    """Đọc lại file Excel đang mở (sau khi người dùng sửa và lưu trong Excel)."""
+    p = Path(S["excel"]) if S["excel"] else None
+    if not p or not p.is_absolute():
+        raise ValueError("File này được kéo thả vào cửa sổ nên tool không biết nó nằm đâu. Hãy kéo thả lại, hoặc bấm 'Chọn file Excel'.")
+    if not p.exists():
+        raise ValueError(f"Không còn thấy file {p}. Hãy bấm 'Chọn file Excel'.")
+    return nap_excel(str(p))
+
+
+def xoa_danh_sach():
+    """Bỏ toàn bộ danh sách đang hiển thị khỏi tool. KHÔNG xóa video đã tải, KHÔNG đụng vào file Excel."""
+    with LOCK:
+        if S["running"]:
+            raise ValueError("Đang tải, hãy bấm Dừng trước rồi mới xóa danh sách.")
+        n = len(S["items"])
+        S.update(items=[], excel="", report="", sheet_bo_qua=[], excel_tt=None)
+        S["outdir"] = tinh_thu_muc_luu() if S.get("thu_muc_chon") else ""
+    print(f"Đã xóa danh sách ({n} link) khỏi tool. Video đã tải và file Excel vẫn giữ nguyên.")
+    return f"Đã xóa danh sách ({n} link). Video đã tải vẫn còn trong thư mục."
 
 
 def cap_nhat_thu_muc():
@@ -283,10 +306,32 @@ def them_item(sheet, row, name, link):
     return it
 
 
-def nap_excel(path):
+def excel_dang_mo(p):
+    """Excel đang mở file này thì có file khóa ẩn "~$<tên>" cạnh nó (tên dài thì Excel bỏ 2 ký tự đầu).
+    Khi đó tool chỉ đọc được bản ĐÃ LƯU trên đĩa, chưa có những gì người dùng vừa dán mà chưa bấm Lưu."""
+    try:
+        p = Path(p)
+        if not p.is_absolute():
+            return False
+        return any((p.parent / ("~$" + x)).exists() for x in {p.name, p.name[1:], p.name[2:]} if x)
+    except Exception:
+        return False
+
+
+def _gio_luu(p):
+    try:
+        return datetime.datetime.fromtimestamp(Path(p).stat().st_mtime).strftime("%H:%M:%S %d/%m/%Y")
+    except Exception:
+        return ""
+
+
+def nap_excel(path, nguon=None):
+    """Mở file Excel, THAY toàn bộ danh sách đang có (trừ link lẻ dán tay). nguon = đường dẫn gốc khi file được kéo thả."""
     p = Path(path.strip().strip('"'))
     if not p.exists():
         raise ValueError(f"Không tìm thấy file: {p}")
+    if S["running"]:
+        raise ValueError("Đang tải danh sách hiện tại. Bấm Dừng trước, rồi mới mở file khác.")
     if p.suffix.lower() == ".xls":
         raise ValueError("File .xls (Excel cũ) không đọc được. Hãy lưu lại thành .xlsx.")
     sheets = T.doc_excel(p)
@@ -309,8 +354,16 @@ def nap_excel(path):
                     moi.update(link=s["moi"], link_goc=s["cu"])
                     n_sua += 1
         cap_nhat_thu_muc()
-    print(f"Đã mở {p.name}: {sum(len(i) for _, i in sheets)} link trong {len(sheets)} sheet."
-          + (f" Dùng lại {n_sua} link bạn đã sửa trong tool." if n_sua else ""))
+        tong = sum(len(i) for _, i in sheets)
+        S["excel_tt"] = {"duong_dan": str(nguon or p.resolve()), "gio_luu": _gio_luu(p), "mtime": p.stat().st_mtime,
+                         "so_link": tong, "sheets": [t for t, _ in sheets], "dang_mo": excel_dang_mo(p),
+                         "gio_doc": datetime.datetime.now().strftime("%H:%M:%S")}
+    print(f"Đã mở {p.name} (lưu lúc {S['excel_tt']['gio_luu']}): {tong} link trong {len(sheets)} sheet "
+          f"[{', '.join(t for t, _ in sheets)}]." + (f" Dùng lại {n_sua} link bạn đã sửa trong tool." if n_sua else ""))
+    if S["excel_tt"]["dang_mo"]:
+        print("! File này đang mở trong Excel: tool chỉ đọc được bản ĐÃ LƯU. Bấm Ctrl+S trong Excel rồi bấm 'Đọc lại file'.")
+    return (f"Đã mở {p.name}: {tong} link, sheet: {', '.join(t for t, _ in sheets)}"
+            f" (file lưu lúc {S['excel_tt']['gio_luu']}).")
 
 
 def them_link(text, ten=""):
@@ -321,6 +374,7 @@ def them_link(text, ten=""):
     with LOCK:
         da_co = {i["name"] for i in S["items"] if i["sheet"] == "Link lẻ"}
         n = len(da_co)
+        ma_moi = []
         for k, u in enumerate(links):
             name = T.ten_hop_le(ten) if ten and len(links) == 1 else ""
             if ten and len(links) > 1:
@@ -329,11 +383,11 @@ def them_link(text, ten=""):
                 n += 1
                 name = f"video_{n}"
             da_co.add(name)
-            them_item("Link lẻ", 0, name, u)
+            ma_moi.append(them_item("Link lẻ", 0, name, u)["id"])
         if not S["outdir"]:
             S["outdir"] = tinh_thu_muc_luu()
         cap_nhat_thu_muc()
-    return len(links)
+    return ma_moi
 
 
 def hook(d):
@@ -643,6 +697,7 @@ def cap_nhat_tool():
         raise ValueError(f"Không ghi được file vào thư mục cài đặt ({str(e)[:80]}). Tool giữ nguyên bản cũ.")
     print(f"Đã cập nhật lên phiên bản {cn['moi']}. Bản cũ lưu ở {cu}. Đang mở lại tool...")
     env = {k: v for k, v in os.environ.items() if k != "TAIVIDEO_PORT"}
+    env["TAIVIDEO_MOI"] = "1"   # bản mới không được "nhường" cho bản cũ đang chuẩn bị thoát (xem ban_dang_chay)
     lenh = [sys.executable, str(HERE / "giao_dien.py")]
     if S["excel"] and Path(S["excel"]).exists():
         lenh.append(S["excel"])
@@ -828,6 +883,22 @@ def ds_cookie():
     return out
 
 
+def _tt_excel():
+    """Thông tin file Excel đang mở + kiểm tra lại mỗi lần giao diện hỏi: còn mở trong Excel không, đã lưu thêm chưa."""
+    tt = S.get("excel_tt")
+    if not tt or not S["excel"]:
+        return None
+    kq = {k: tt[k] for k in ("duong_dan", "gio_luu", "gio_doc", "so_link", "sheets")}
+    p = Path(S["excel"])
+    kq["dang_mo"] = excel_dang_mo(p)
+    try:
+        kq["da_doi"] = p.is_absolute() and p.stat().st_mtime > tt["mtime"] + 0.5
+    except Exception:
+        kq["da_doi"] = False
+    kq["doc_lai_duoc"] = p.is_absolute()
+    return kq
+
+
 def trang_thai(log_tu=0):
     with LOCK:
         dem = {}
@@ -839,6 +910,7 @@ def trang_thai(log_tu=0):
             "count": dem, "cookies": ds_cookie(), "max_height": T.MAX_HEIGHT or 0, "h264": T.CHUYEN_H264,
             "tiktok_mid": T.TIKTOK_TRUNG_GIAN, "outdir_base": S.get("thu_muc_chon", ""),
             "skipped_sheets": S.get("sheet_bo_qua") or [],
+            "excel_info": _tt_excel(),
             "log": LOG[-300:], "cur": S["cur"]["id"] if S["cur"] else None, "version": T.PHIEN_BAN,
             "suspect": sum(1 for i in S["items"] if i.get("suspect")),
             "threads": S["luong"], "threads_max": LUONG_TOI_DA,
@@ -893,8 +965,7 @@ class H(BaseHTTPRequestHandler):
             from urllib.parse import urlsplit, parse_qs
             try:
                 ten = parse_qs(urlsplit(self.path).query).get("name", ["danh_sach.xlsx"])[0]
-                nap_file_tai_len(ten, than)
-                return self._gui(200, {"ok": True})
+                return self._gui(200, {"ok": True, "msg": nap_file_tai_len(ten, than)})
             except Exception as e:
                 return self._gui(200, {"error": str(e)})
         try:
@@ -904,11 +975,21 @@ class H(BaseHTTPRequestHandler):
         a = self.path
         try:
             if a == "/api/pick_excel":
+                if S["running"]:   # báo NGAY, đừng để người dùng chọn file xong mới bị từ chối
+                    raise ValueError("Đang tải danh sách hiện tại. Bấm Dừng trước, rồi mới mở file khác.")
                 p = chon_bang_hop_thoai("excel")
                 if p:
-                    nap_excel(p)
+                    return self._gui(200, {"ok": True, "msg": nap_excel(p)})
             elif a == "/api/load":
-                nap_excel(d.get("path", ""))
+                return self._gui(200, {"ok": True, "msg": nap_excel(d.get("path", ""))})
+            elif a == "/api/reload":
+                return self._gui(200, {"ok": True, "msg": doc_lai_excel()})
+            elif a == "/api/ping":
+                # Lần mở tool thứ hai hỏi xem đã có bản đang chạy chưa (xem main): coi như cửa sổ vẫn mở
+                S["last_poll"] = time.time()
+                S["bye"] = 0
+                return self._gui(200, {"ok": True, "url": f"http://127.0.0.1:{self.server.server_address[1]}/",
+                                       "thoat": bool(S.get("thoat"))})
             elif a == "/api/pick_outdir":
                 if S["running"]:
                     raise ValueError("Đang tải, hãy dừng trước khi đổi thư mục.")
@@ -918,9 +999,10 @@ class H(BaseHTTPRequestHandler):
             elif a == "/api/reset_outdir":
                 dat_thu_muc_luu("")
             elif a == "/api/add_links":
-                them_link(d.get("links", ""), d.get("name", ""))
-                if d.get("start") and not S["running"]:
-                    bat_dau("all")
+                moi = them_link(d.get("links", ""), d.get("name", ""))
+                # Chỉ tải những link VỪA dán, không kéo theo cả danh sách Excel đang mở
+                if d.get("start") and not S["running"] and moi:
+                    bat_dau("all", set(moi))
             elif a == "/api/start":
                 bat_dau(d.get("mode", "all"), set(d["ids"]) if d.get("ids") else None)
             elif a == "/api/edit_link":
@@ -935,11 +1017,7 @@ class H(BaseHTTPRequestHandler):
                     S["stopping"] = True
                     print("Đang dừng sau bước hiện tại...")
             elif a == "/api/clear":
-                with LOCK:
-                    if S["running"]:
-                        raise ValueError("Đang tải, hãy dừng trước.")
-                    S.update(items=[], excel="", report="", sheet_bo_qua=[])
-                    S["outdir"] = tinh_thu_muc_luu() if S.get("thu_muc_chon") else ""
+                return self._gui(200, {"ok": True, "msg": xoa_danh_sach()})
             elif a == "/api/open":
                 w = d.get("what")
                 if w == "outdir":
@@ -1000,8 +1078,48 @@ def mo_cua_so(url):
     webbrowser.open(url)
 
 
+def _file_dang_chay():
+    return T.TAM_DIR / "dang_chay.json"
+
+
+def ban_dang_chay():
+    """Tool đã mở sẵn (vd. người dùng bấm biểu tượng lần nữa)? Trả về (cổng, token) của bản đó, hoặc None.
+    Mở 2 bản cùng lúc thì có 2 cửa sổ giống hệt nhau, mỗi cái một danh sách -> rất dễ nhìn nhầm danh sách cũ."""
+    if os.environ.get("TAIVIDEO_PORT") or os.environ.get("TAIVIDEO_MOI"):
+        return None
+    import urllib.request
+    try:
+        d = json.loads(_file_dang_chay().read_text(encoding="utf-8"))
+        cong, tk = int(d["port"]), str(d["token"])
+        req = urllib.request.Request(f"http://127.0.0.1:{cong}/api/ping", data=b"{}", method="POST",
+                                     headers={"X-Token": tk, "Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=3) as r:
+            kq = json.loads(r.read().decode("utf-8"))
+        return (cong, tk) if kq.get("ok") and not kq.get("thoat") else None
+    except Exception:
+        return None
+
+
+def nhuong_cho_ban_dang_chay(cong, tk):
+    """Giao file Excel (nếu có) cho bản đang chạy rồi mở cửa sổ của bản đó."""
+    import urllib.request
+    if len(sys.argv) > 1:
+        try:
+            body = json.dumps({"path": sys.argv[1]}).encode("utf-8")
+            req = urllib.request.Request(f"http://127.0.0.1:{cong}/api/load", data=body, method="POST",
+                                         headers={"X-Token": tk, "Content-Type": "application/json"})
+            urllib.request.urlopen(req, timeout=60).read()
+        except Exception:
+            pass
+    mo_cua_so(f"http://127.0.0.1:{cong}/")
+
+
 def main():
     global ENV_THREAD
+    dc = ban_dang_chay()
+    if dc:
+        nhuong_cho_ban_dang_chay(*dc)
+        return
     sys.stdout = Tee(sys.stdout)
     if sys.stderr is None:   # chạy bằng pythonw (không có cửa sổ đen): ghi lỗi ra file
         try:
@@ -1019,6 +1137,12 @@ def main():
     srv = ThreadingHTTPServer(("127.0.0.1", port), H)
     url = f"http://127.0.0.1:{port}/"
     print(f"Giao diện: {url}")
+    if not os.environ.get("TAIVIDEO_PORT"):
+        try:
+            T.TAM_DIR.mkdir(exist_ok=True)
+            _file_dang_chay().write_text(json.dumps({"port": port, "token": TOKEN, "pid": os.getpid()}), encoding="utf-8")
+        except Exception:
+            pass
     ENV_THREAD = threading.Thread(target=kiem_tra_moi_truong, daemon=True)
     ENV_THREAD.start()
     threading.Thread(target=srv.serve_forever, daemon=True).start()
@@ -1041,6 +1165,11 @@ def main():
                 print("Cửa sổ giao diện đã đóng -> thoát.")
                 break
     except KeyboardInterrupt:
+        pass
+    try:
+        if json.loads(_file_dang_chay().read_text(encoding="utf-8")).get("pid") == os.getpid():
+            _file_dang_chay().unlink()
+    except Exception:
         pass
     srv.shutdown()
 

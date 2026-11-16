@@ -52,7 +52,7 @@ FALLBACK_LINK_COL = 3
 FALLBACK_NAME_COL = 4
 # ================================================================
 
-PHIEN_BAN = "17"
+PHIEN_BAN = "18"
 SCRIPT_DIR = Path(__file__).resolve().parent
 VIDEO_EXTS = {".mp4", ".mkv", ".webm", ".mov", ".m4v", ".flv", ".avi"}
 

@@ -1,11 +1,11 @@
 {
-  "phien_ban": "17",
-  "the": "v17",
-  "ghi_chu": "Sửa lỗi cột Link video bị mất khi cửa sổ hẹp; báo rõ sheet nào trong file Excel không được đọc",
+  "phien_ban": "18",
+  "the": "v18",
+  "ghi_chu": "Thêm nút Xóa danh sách; báo khi file Excel đang mở hoặc vừa được lưu lại, nút Đọc lại file; chỉ chạy một bản tool",
   "files": {
-    "tai_video.py": "a00f77ca95ba8f1c1c9f848a98ce714197d1449c8ac3ee1f51b4dfbac71e88ff",
-    "giao_dien.py": "d5625e9153de915b46399fc04bf92e5b6c6dec910613341c29a0c5f762172d8d",
-    "giao_dien.html": "1491fa6cb940a802a0d231bfe2b2b004ed73be3fcd31a4bd846cd852a50a0c34",
-    "HUONG_DAN.txt": "f30e87bbbc46a4a26fc3526a5e29d8e7cdcdf93fe10eaf62d1a45a8430e3cb08"
+    "tai_video.py": "63131eba4fbf3ce459e5673a6aea2ead176b9af69c84361c274f9f3691324c3c",
+    "giao_dien.py": "d8e8e60a34396f8850f01758b58042cad6c05e9ab19b2e96af499a4b2c5cadea",
+    "giao_dien.html": "7de30e5ef2d45edc90eb94f0e56b3dd652911722b330b49c4db1527fc02fcd25",
+    "HUONG_DAN.txt": "f089f3f8b3ff622444120333b7442597e9bba50d9a4d8508c059008bcbbcc4e7"
   }
 }

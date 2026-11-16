@@ -25,6 +25,11 @@ HT CREATIVE AGENT - CÔNG CỤ TẢI VIDEO HÀNG LOẠT TỪ FILE EXCEL
      đóng cửa sổ giao diện thì tool tự thoát sau khoảng 1 phút.
    - Trang chủ: bấm "Chọn file Excel", hoặc dán link vào ô để tải nhanh.
    - Danh sách tải: xem trạng thái từng link, lọc link lỗi, "Thử lại link lỗi".
+   - Mở file Excel mới sẽ THAY danh sách cũ. Trang chủ ghi rõ đường dẫn file và giờ file được
+     lưu. Nếu file đang mở trong Excel, tool chỉ đọc được bản ĐÃ LƯU: bấm Ctrl+S trong Excel
+     rồi bấm "Đọc lại file". "Xóa danh sách" bỏ danh sách khỏi tool (không xóa video, không
+     đụng vào file Excel). Link dán ở ô "tải nhanh" được THÊM vào nhóm "Link lẻ".
+   - Bấm biểu tượng mở tool khi tool đang mở: tool không mở bản thứ hai mà hiện lại cửa sổ cũ.
    - Nút bút chì cạnh mỗi link (Sửa link): dùng khi link trong sheet lấy sai (link nhóm, link
      trang chủ, bài không có video...). Dán link đúng rồi bấm "Lưu và tải". Tool KHÔNG sửa
      file Excel của bạn; link mới được nhớ trên máy, lần sau mở lại đúng file Excel đó vẫn

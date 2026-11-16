@@ -178,7 +178,9 @@ code{background:#eef2f0;border-radius:5px;padding:1px 6px;font-family:Consolas,m
 
       <div id="loaded">
         <div class="card">
-          <div class="row"><b id="ld-name"></b><span class="sp"></span><button class="link" id="b-clear">Bỏ danh sách</button></div>
+          <div class="row"><b id="ld-name"></b><span class="sp"></span><button class="link" id="b-reload" style="display:none">Đọc lại file</button><button class="link" id="b-clear">Xóa danh sách</button></div>
+          <div id="ld-info" style="font-size:12px;color:var(--muted);margin-top:3px;word-break:break-all"></div>
+          <div class="warn" id="ld-xl" style="display:none"></div>
           <div class="chips" id="ld-sheets"></div>
           <div class="warn" id="ld-skip" style="display:none"></div>
           <div class="tiles">
@@ -213,6 +215,8 @@ code{background:#eef2f0;border-radius:5px;padding:1px 6px;font-family:Consolas,m
         <select id="fsheet"></select>
         <input id="fq" placeholder="Tìm tên file hoặc link">
         <span class="sp"></span>
+        <button class="btn" id="b-reload2" style="display:none" title="Đọc lại file Excel sau khi bạn sửa và lưu trong Excel">Đọc lại file</button>
+        <button class="btn" id="b-clear2" title="Bỏ danh sách này khỏi tool. Video đã tải và file Excel không bị xóa.">Xóa danh sách</button>
         <button class="btn" id="b-retry">Thử lại link lỗi</button>
         <button class="btn" data-open="outdir">Mở thư mục</button>
         <button class="btn" data-open="report" id="b-rep" style="display:none">Mở báo cáo</button>
@@ -324,10 +328,18 @@ document.addEventListener("click",e=>{
   const ga=e.target.closest("[data-assign]"); if(ga){ toast("Đang mở hộp thoại chọn file…"); act("/api/assign",{id:+ga.dataset.assign}); }
 });
 $("#nav-guide").onclick=()=>act("/api/open",{what:"guide"});
-$("#b-excel").onclick=async()=>{ toast("Đang mở hộp thoại chọn file…"); await act("/api/pick_excel") };
+// Sau khi mở / đọc lại / xóa: báo rõ đã làm gì (để không nhầm với danh sách cũ)
+function baoKetQua(j,tg){ if(j&&!j.error&&j.msg){ toast(j.msg); if(tg) go(tg); } return j }
+$("#b-excel").onclick=async()=>{ if(ST&&ST.running){toast("Đang tải danh sách hiện tại. Bấm Dừng trước, rồi mới mở file khác.");return}
+  toast("Đang mở hộp thoại chọn file…"); baoKetQua(await act("/api/pick_excel")) };
+$("#b-reload").onclick=$("#b-reload2").onclick=async()=>baoKetQua(await act("/api/reload"));
+$("#b-clear").onclick=$("#b-clear2").onclick=async()=>{
+  if(!ST||!ST.items.length) return;
+  if(ST.running){toast("Đang tải, hãy bấm Dừng trước rồi mới xóa danh sách.");return}
+  if(!confirm(`Xóa danh sách ${ST.items.length} link đang hiển thị khỏi tool?\n\nVideo đã tải và file Excel KHÔNG bị xóa.`)) return;
+  baoKetQua(await act("/api/clear"),"home"); };
 $("#b-out").onclick=$("#b-out2").onclick=async()=>{ toast("Đang mở hộp thoại chọn thư mục…"); await act("/api/pick_outdir") };
 $("#b-out-reset").onclick=()=>act("/api/reset_outdir");
-$("#b-clear").onclick=()=>act("/api/clear");
 const start=()=>act("/api/start",{mode:"all"}), stop=()=>act("/api/stop"), retry=()=>act("/api/start",{mode:"failed"});
 $("#b-start").onclick=$("#b-start2").onclick=start; $("#b-stop").onclick=$("#b-stop2").onclick=stop;
 $("#b-retry").onclick=$("#f-retry").onclick=retry;
@@ -338,9 +350,11 @@ $("#b-dupfix").onclick=()=>act("/api/fix_suspect");
 addEventListener("dragover",e=>e.preventDefault());
 addEventListener("drop",async e=>{ e.preventDefault(); const f=e.dataTransfer.files[0]; if(!f) return;
   toast("Đang mở "+f.name+"…");
-  try{ const r=await fetch("/api/upload?name="+encodeURIComponent(f.name),{method:"POST",headers:{"X-Token":TOKEN},body:await f.arrayBuffer()}); const j=await r.json(); if(j.error) toast(j.error); }catch(x){ toast("Không mở được file") }
+  try{ const r=await fetch("/api/upload?name="+encodeURIComponent(f.name),{method:"POST",headers:{"X-Token":TOKEN},body:await f.arrayBuffer()}); const j=await r.json(); if(j.error) toast(j.error); else baoKetQua(j); }catch(x){ toast("Không mở được file") }
   await poll(); });
-async function addLinks(){ const v=$("#q").value.trim(); if(!v) return; const j=await act("/api/add_links",{links:v,name:$("#qn").value.trim(),start:true}); if(j&&!j.error){$("#q").value="";$("#qn").value="";go("list")} }
+async function addLinks(){ const v=$("#q").value.trim(); if(!v) return; const j=await act("/api/add_links",{links:v,name:$("#qn").value.trim(),start:true});
+  // Link dán tay được THÊM vào nhóm "Link lẻ" (không thay danh sách Excel) -> lọc sẵn nhóm đó cho dễ thấy
+  if(j&&!j.error){$("#q").value="";$("#qn").value="";const fs=$("#fsheet");if([...fs.options].some(o=>o.value==="Link lẻ"))fs.value="Link lẻ";go("list");draw()} }
 $("#b-add").onclick=addLinks; $("#q").onkeydown=$("#qn").onkeydown=e=>{if(e.key==="Enter")addLinks()};
 function setF(f){FLT=f;$$("#flt button").forEach(b=>b.classList.toggle("on",b.dataset.f===f));draw()}
 $$("#flt button").forEach(b=>b.onclick=()=>setF(b.dataset.f));
@@ -423,6 +437,12 @@ function render(){
     $("#ld-name").textContent=ST.excel?ST.excel.split(/[\\/]/).pop():"Link lẻ";
     const sh={}; ST.items.forEach(i=>sh[i.sheet]=(sh[i.sheet]||0)+1);
     $("#ld-sheets").innerHTML=Object.entries(sh).map(([k,v])=>`<span class="chip">${esc(k)} · ${v}</span>`).join("");
+    const xi=ST.excel_info;
+    $("#ld-info").textContent=xi?`${xi.duong_dan} · file lưu lúc ${xi.gio_luu} · tool đọc lúc ${xi.gio_doc}`:"";
+    const canhBao=xi&&xi.da_doi?"<b>File Excel vừa được lưu lại sau khi tool đọc.</b> Danh sách bên dưới là bản CŨ, bấm “Đọc lại file” để cập nhật."
+      :xi&&xi.dang_mo?"<b>File này đang mở trong Excel.</b> Tool chỉ đọc được những gì ĐÃ LƯU. Nếu bạn vừa dán link mới, bấm Ctrl+S trong Excel rồi bấm “Đọc lại file”.":"";
+    $("#ld-xl").style.display=canhBao?"block":"none"; $("#ld-xl").innerHTML=canhBao;
+    ["#b-reload","#b-reload2"].forEach(s=>{$(s).style.display=xi&&xi.doc_lai_duoc?"":"none";$(s).disabled=ST.running});
     const bq=ST.skipped_sheets||[];
     $("#ld-skip").style.display=bq.length?"block":"none";
     $("#ld-skip").innerHTML=bq.length?"<b>Có sheet KHÔNG được đọc:</b><br>"+bq.map(s=>`• Sheet “${esc(s.sheet)}”: ${esc(s.ly_do)}.`).join("<br>")+"<br>Sửa lại sheet đó trong Excel rồi mở lại file.":"";
@@ -432,7 +452,8 @@ function render(){
     $("#ld-now").textContent=ST.stopping?"Đang dừng sau bước hiện tại…":run.length===1?`Đang tải ${run[0].sheet} / ${run[0].name}`:run.length?`Đang tải ${run.length} link cùng lúc: ${run.map(i=>i.name).join(", ")}`:"";
   }
   const tenFile=ST.excel?ST.excel.split(/[\\/]/).pop():"";
-  $("#lst-file").innerHTML=tenFile?`File: <b>${esc(tenFile)}</b>`:""; $("#lst-file").title=ST.excel||"";
+  $("#lst-file").innerHTML=tenFile?`File: <b>${esc(tenFile)}</b>`+(ST.excel_info&&ST.excel_info.da_doi?' <span style="color:#a15c00">(đã đổi, bấm Đọc lại)</span>':""):"";
+  $("#lst-file").title=ST.excel_info?`${ST.excel_info.duong_dan}\nFile lưu lúc ${ST.excel_info.gio_luu}`:(ST.excel||"");
   $("#set-out").textContent=ST.outdir;
   $("#set-out-note").textContent=ST.outdir_base?"Bạn đã chọn: "+ST.outdir_base+". Mỗi file Excel có một thư mục con riêng mang tên file đó. Lựa chọn này được nhớ cho các lần mở sau.":"Mặc định: cạnh file Excel, trong thư mục <tên file Excel>_video.";
   $("#b-out-reset").style.display=ST.outdir_base?"":"none"; $("#b-out-reset").disabled=$("#b-out").disabled=$("#b-out2").disabled=ST.running;
@@ -446,6 +467,7 @@ function render(){
   const can=!ST.running&&(c.pending||er);
   ["#b-start","#b-start2"].forEach(s=>{$(s).style.display=ST.running?"none":"";$(s).disabled=!can;$(s).textContent=ok||er?"Tải tiếp":"Bắt đầu tải"});
   ["#b-stop","#b-stop2"].forEach(s=>{$(s).style.display=ST.running?"":"none";$(s).disabled=ST.stopping});
+  $("#b-clear2").disabled=ST.running||!n; $("#b-excel").title=ST.running?"Đang tải: bấm Dừng trước rồi mới mở file khác":"";
   $("#b-retry").disabled=ST.running||!er; $("#b-rep").style.display=ST.report?"":"none";
   // danh sách
   const sus=ST.suspect||0, db=$("#dupbar");
