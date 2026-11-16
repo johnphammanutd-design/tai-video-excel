@@ -1,11 +1,11 @@
 {
-  "phien_ban": "16",
-  "the": "v16",
-  "ghi_chu": "Đổi tên thành HT CREATIVE AGENT với logo mới; thêm nút sửa link trong danh sách tải; sửa lỗi đổi thư mục lưu không nhận; tải được video Corriere và video X bị chặn với khách",
+  "phien_ban": "17",
+  "the": "v17",
+  "ghi_chu": "Sửa lỗi cột Link video bị mất khi cửa sổ hẹp; báo rõ sheet nào trong file Excel không được đọc",
   "files": {
-    "tai_video.py": "f2508b2571cfa40d773a46b86c84b4c1d9abc7cebd3f5d72a1054ac304b85198",
-    "giao_dien.py": "f30dd76c3bc60944c8e55e829d5df4907c4b6cbbb8bde748c12001a873f5708a",
-    "giao_dien.html": "b83f2c189c4ec7516003837b065ff3ecc4a8ec64a8f703a4c90dd7bfb3826fb0",
-    "HUONG_DAN.txt": "3d4b1f35621b75f10fcda347070dc9d76d548817689c6c46685932f67e542981"
+    "tai_video.py": "a00f77ca95ba8f1c1c9f848a98ce714197d1449c8ac3ee1f51b4dfbac71e88ff",
+    "giao_dien.py": "d5625e9153de915b46399fc04bf92e5b6c6dec910613341c29a0c5f762172d8d",
+    "giao_dien.html": "1491fa6cb940a802a0d231bfe2b2b004ed73be3fcd31a4bd846cd852a50a0c34",
+    "HUONG_DAN.txt": "f30e87bbbc46a4a26fc3526a5e29d8e7cdcdf93fe10eaf62d1a45a8430e3cb08"
   }
 }

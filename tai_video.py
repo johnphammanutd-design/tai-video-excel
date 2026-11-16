@@ -52,7 +52,7 @@ FALLBACK_LINK_COL = 3
 FALLBACK_NAME_COL = 4
 # ================================================================
 
-PHIEN_BAN = "16"
+PHIEN_BAN = "17"
 SCRIPT_DIR = Path(__file__).resolve().parent
 VIDEO_EXTS = {".mp4", ".mkv", ".webm", ".mov", ".m4v", ".flv", ".avi"}
 
@@ -144,20 +144,45 @@ def doc_sheet(ws, header_row, link_col, name_col):
     return items
 
 
+SHEET_BO_QUA = []   # [(tên sheet, lý do)] của lần doc_excel gần nhất: sheet có link nhưng tool không đọc
+
+
+def _dem_link(ws, toi_da_hang=3000):
+    n = 0
+    for row in ws.iter_rows(min_row=1, max_row=min(ws.max_row, toi_da_hang)):
+        for c in row:
+            if isinstance(c.value, str) and c.value.strip().lower().startswith(("http://", "https://", "=hyperlink(")):
+                n += 1
+            elif c.hyperlink is not None and getattr(c.hyperlink, "target", None):
+                n += 1
+    return n
+
+
 def doc_excel(path: Path):
-    """Trả về danh sách (tên sheet, các link) cho MỌI sheet có cột link + tên file."""
+    """Trả về danh sách (tên sheet, các link) cho MỌI sheet có cột link + tên file.
+    Sheet có link nhưng không đọc (đang ẩn, hoặc không thấy tiêu đề cột) được ghi vào SHEET_BO_QUA để báo người dùng."""
     import openpyxl
 
     # Không dùng read_only để đọc được hyperlink
     wb = openpyxl.load_workbook(path, data_only=False)
     ket_qua = []
+    bo_qua = []
     for ws in wb.worksheets:
-        if ws.sheet_state != "visible":
-            continue
         r = tim_cot(ws)
+        if ws.sheet_state != "visible":
+            if r and _dem_link(ws):
+                bo_qua.append((ws.title, "sheet đang ẨN trong Excel"))
+            continue
         if r:
             print(f"Sheet '{ws.title}': cột link {r[1]}, cột tên file {r[2]}")
             ket_qua.append((ws.title, doc_sheet(ws, *r)))
+        else:
+            n = _dem_link(ws)
+            if n:
+                bo_qua.append((ws.title, f"có {n} link nhưng không thấy 2 cột tiêu đề 'Link video' và 'Đặt tên file tải về'"))
+    SHEET_BO_QUA[:] = bo_qua
+    for ten, ly_do in bo_qua:
+        print(f"! BỎ QUA sheet '{ten}': {ly_do}.")
     if not ket_qua:
         ws = wb.active
         print(f"! Không tìm thấy tiêu đề cột, dùng mặc định cột C (link) và D (tên file) ở sheet '{ws.title}'.")

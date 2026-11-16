@@ -10,3 +10,4 @@ __pycache__/
 dong_goi_exe/build/
 dong_goi_exe/*.exe
 dong_goi_exe/*.zip
+dong_goi_exe/*.7z

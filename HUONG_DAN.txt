@@ -13,6 +13,9 @@ HT CREATIVE AGENT - CÔNG CỤ TẢI VIDEO HÀNG LOẠT TỪ FILE EXCEL
    - Nếu không tìm thấy tiêu đề, công cụ dùng cột C (link) và D (tên file).
    - File có NHIỀU SHEET: tool tải hết mọi sheet có 2 cột trên, mỗi sheet lưu
      vào một thư mục con mang tên sheet (vd. "Phần 1 - EN\2.1.mp4").
+   - Sheet có link nhưng tiêu đề cột khác (vd. "Nguồn", "Tên video") hoặc sheet đang ẩn
+     sẽ KHÔNG được đọc; Trang chủ hiện khung vàng ghi rõ sheet nào bị bỏ qua.
+     Khi nhân bản file Excel cũ để làm kịch bản mới, nhớ đổi cả tên sheet cho dễ nhận.
    - LƯU Ý tên file dạng số: Excel coi 8.10 là 8.1. Nếu cần tên như 8.10,
      hãy định dạng cột tên file là Text (Văn bản) trước khi nhập.
 

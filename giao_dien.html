@@ -93,7 +93,11 @@ h1{font-size:19px;margin:0 0 4px}
 .tool input{width:190px}
 .sp{flex:1}
 .tw{flex:1;overflow:auto;min-height:0}
-table{width:100%;border-collapse:collapse;table-layout:fixed}
+/* min-width: cửa sổ hẹp thì bảng cuộn ngang, KHÔNG ép mất cột "Link video" */
+table{width:100%;min-width:860px;border-collapse:collapse;table-layout:fixed}
+.lst-file{font-size:12.5px;color:var(--muted);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lst-file b{color:var(--text)}
+.warn{margin-top:10px;padding:9px 12px;border-radius:9px;background:#fdf1d6;color:#7a4f00;font-size:12.5px;line-height:1.45}
 th{position:sticky;top:0;background:#f7f9f8;text-align:left;font-size:12px;color:var(--muted);font-weight:600;padding:8px 10px;border-bottom:1px solid var(--line);z-index:1}
 td{padding:8px 10px;border-bottom:1px solid #eef1f0;vertical-align:middle;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 tr:hover td{background:#fafcfb}
@@ -176,6 +180,7 @@ code{background:#eef2f0;border-radius:5px;padding:1px 6px;font-family:Consolas,m
         <div class="card">
           <div class="row"><b id="ld-name"></b><span class="sp"></span><button class="link" id="b-clear">Bỏ danh sách</button></div>
           <div class="chips" id="ld-sheets"></div>
+          <div class="warn" id="ld-skip" style="display:none"></div>
           <div class="tiles">
             <div class="tile"><b id="t-all">0</b><span>Tổng link</span></div>
             <div class="tile o"><b id="t-ok">0</b><span>Đã tải</span></div>
@@ -197,6 +202,7 @@ code{background:#eef2f0;border-radius:5px;padding:1px 6px;font-family:Consolas,m
 
     <section class="view" id="list">
       <div class="tool">
+        <span class="lst-file" id="lst-file"></span>
         <div class="seg" id="flt">
           <button data-f="all" class="on">Tất cả <span></span></button>
           <button data-f="todo">Chờ <span></span></button>
@@ -215,7 +221,7 @@ code{background:#eef2f0;border-radius:5px;padding:1px 6px;font-family:Consolas,m
       </div>
       <div class="tw">
         <table>
-          <colgroup><col style="width:118px"><col style="width:84px"><col><col style="width:138px"><col style="width:30%"><col style="width:152px"></colgroup>
+          <colgroup><col style="width:112px"><col style="width:84px"><col style="width:30%"><col style="width:124px"><col><col style="width:152px"></colgroup>
           <thead><tr><th>Sheet</th><th>Tên file</th><th>Link video</th><th>Trạng thái</th><th>Ghi chú</th><th></th></tr></thead>
           <tbody id="tb"></tbody>
         </table>
@@ -386,7 +392,7 @@ function draw(){
     const st=`<span class="st ${i.status}">${LBL[i.status]}${i.status==="running"&&i.pct?` ${i.pct}%`:""}</span>`+(i.status==="running"?`<div class="mini"><i style="width:${i.pct||3}%"></i></div>`:"");
     const note=i.suspect?i.suspect:i.status==="error"?i.error:(i.status==="done"&&i.method&&i.method!=="yt-dlp"?"Lấy bằng: "+i.method:"");
     const btn=i.status==="error"?`<button class="btn sm" data-retry="${i.id}" ${ST.running?"disabled":""}>Thử lại</button> <button class="btn sm" data-assign="${i.id}" ${ST.running?"disabled":""} title="Bạn đã tải video này bằng cách khác? Chọn file đó, tool tự đặt đúng tên và chép vào đúng thư mục.">Gán file</button>`:(i.file?`<button class="btn sm" data-open="item" data-id="${i.id}">Mở</button>`:"");
-    return `<tr><td title="${esc(i.sheet)}">${esc(i.sheet)}</td><td class="nm">${esc(i.name)}</td><td><div class="lk"><button class="ed" data-edit="${i.id}" ${ST.running?"disabled":""} title="Sửa link video của dòng này">✎</button><a href="${esc(i.link)}" target="_blank" rel="noopener" title="${esc(i.link)}${i.link_goc?"\nLink trong Excel: "+esc(i.link_goc):""}">${esc(i.link.replace(/^https?:\/\/(www\.)?/,""))}</a>${i.link_goc?'<span class="sua" title="Link này đã được bạn sửa trong tool">đã sửa</span>':""}</div></td><td>${st}</td><td class="note ${i.status==="error"||i.suspect?"er":""}" title="${esc(note)}">${esc(note.length>190?note.slice(0,190)+"…":note)}</td><td>${btn}</td></tr>`;
+    return `<tr><td title="${esc(i.sheet)}${i.row?" · hàng "+i.row+" trong Excel":""}">${esc(i.sheet)}</td><td class="nm">${esc(i.name)}</td><td><div class="lk"><button class="ed" data-edit="${i.id}" ${ST.running?"disabled":""} title="Sửa link video của dòng này">✎</button><a href="${esc(i.link)}" target="_blank" rel="noopener" title="${esc(i.link)}${i.link_goc?"\nLink trong Excel: "+esc(i.link_goc):""}">${esc(i.link.replace(/^https?:\/\/(www\.)?/,""))}</a>${i.link_goc?'<span class="sua" title="Link này đã được bạn sửa trong tool">đã sửa</span>':""}</div></td><td>${st}</td><td class="note ${i.status==="error"||i.suspect?"er":""}" title="${esc(note)}">${esc(note.length>190?note.slice(0,190)+"…":note)}</td><td>${btn}</td></tr>`;
   }).join("");
 }
 function render(){
@@ -417,11 +423,16 @@ function render(){
     $("#ld-name").textContent=ST.excel?ST.excel.split(/[\\/]/).pop():"Link lẻ";
     const sh={}; ST.items.forEach(i=>sh[i.sheet]=(sh[i.sheet]||0)+1);
     $("#ld-sheets").innerHTML=Object.entries(sh).map(([k,v])=>`<span class="chip">${esc(k)} · ${v}</span>`).join("");
+    const bq=ST.skipped_sheets||[];
+    $("#ld-skip").style.display=bq.length?"block":"none";
+    $("#ld-skip").innerHTML=bq.length?"<b>Có sheet KHÔNG được đọc:</b><br>"+bq.map(s=>`• Sheet “${esc(s.sheet)}”: ${esc(s.ly_do)}.`).join("<br>")+"<br>Sửa lại sheet đó trong Excel rồi mở lại file.":"";
     $("#t-all").textContent=n;$("#t-ok").textContent=ok;$("#t-wait").textContent=todo;$("#t-err").textContent=er;
     $("#ld-out").textContent="‎"+ST.outdir; $("#pg").style.width=(n?(ok+er)*100/n:0)+"%";
     const run=ST.items.filter(i=>i.status==="running");
     $("#ld-now").textContent=ST.stopping?"Đang dừng sau bước hiện tại…":run.length===1?`Đang tải ${run[0].sheet} / ${run[0].name}`:run.length?`Đang tải ${run.length} link cùng lúc: ${run.map(i=>i.name).join(", ")}`:"";
   }
+  const tenFile=ST.excel?ST.excel.split(/[\\/]/).pop():"";
+  $("#lst-file").innerHTML=tenFile?`File: <b>${esc(tenFile)}</b>`:""; $("#lst-file").title=ST.excel||"";
   $("#set-out").textContent=ST.outdir;
   $("#set-out-note").textContent=ST.outdir_base?"Bạn đã chọn: "+ST.outdir_base+". Mỗi file Excel có một thư mục con riêng mang tên file đó. Lựa chọn này được nhớ cho các lần mở sau.":"Mặc định: cạnh file Excel, trong thư mục <tên file Excel>_video.";
   $("#b-out-reset").style.display=ST.outdir_base?"":"none"; $("#b-out-reset").disabled=$("#b-out").disabled=$("#b-out2").disabled=ST.running;

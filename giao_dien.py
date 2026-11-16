@@ -296,6 +296,7 @@ def nap_excel(path):
         if S["running"]:
             raise ValueError("Đang tải, hãy dừng trước khi mở file khác.")
         S["items"] = [i for i in S["items"] if i["sheet"] == "Link lẻ"]
+        S["sheet_bo_qua"] = [{"sheet": t, "ly_do": l} for t, l in T.SHEET_BO_QUA]
         S["excel"] = str(p.resolve())
         S["outdir"] = tinh_thu_muc_luu()
         da_sua, n_sua = _doc_link_sua(), 0
@@ -837,6 +838,7 @@ def trang_thai(log_tu=0):
             "running": S["running"], "stopping": S["stopping"], "env": S["env"], "report": S["report"],
             "count": dem, "cookies": ds_cookie(), "max_height": T.MAX_HEIGHT or 0, "h264": T.CHUYEN_H264,
             "tiktok_mid": T.TIKTOK_TRUNG_GIAN, "outdir_base": S.get("thu_muc_chon", ""),
+            "skipped_sheets": S.get("sheet_bo_qua") or [],
             "log": LOG[-300:], "cur": S["cur"]["id"] if S["cur"] else None, "version": T.PHIEN_BAN,
             "suspect": sum(1 for i in S["items"] if i.get("suspect")),
             "threads": S["luong"], "threads_max": LUONG_TOI_DA,
@@ -936,7 +938,7 @@ class H(BaseHTTPRequestHandler):
                 with LOCK:
                     if S["running"]:
                         raise ValueError("Đang tải, hãy dừng trước.")
-                    S.update(items=[], excel="", report="")
+                    S.update(items=[], excel="", report="", sheet_bo_qua=[])
                     S["outdir"] = tinh_thu_muc_luu() if S.get("thu_muc_chon") else ""
             elif a == "/api/open":
                 w = d.get("what")
