@@ -52,7 +52,7 @@ FALLBACK_LINK_COL = 3
 FALLBACK_NAME_COL = 4
 # ================================================================
 
-PHIEN_BAN = "18"
+PHIEN_BAN = "19"
 SCRIPT_DIR = Path(__file__).resolve().parent
 VIDEO_EXTS = {".mp4", ".mkv", ".webm", ".mov", ".m4v", ".flv", ".avi"}
 
@@ -787,7 +787,7 @@ def douyin_id(url: str):
         return None
 
 
-def _douyin_link_tu_du_lieu(video: dict):
+def _douyin_link_tu_du_lieu(video: dict, theo_nhom: bool = False):
     """Lấy danh sách link phát từ dữ liệu 'video' của Douyin, ưu tiên: file mp4 đủ hình+tiếng,
     mã H.264 (mở được ở mọi phần mềm dựng), chất lượng cao nhất."""
     def ds_link(o):
@@ -809,30 +809,76 @@ def _douyin_link_tu_du_lieu(video: dict):
         if link:
             muc.append((h265, -int(toc_do or 0), link))
     muc.sort(key=lambda x: x[:2])
-    out = [u for _, _, ds in muc for u in ds]
+    nhom_tho = [ds for _, _, ds in muc]
     for khoa in ("play_addr_h264", "play_addr", "playAddr", "playApi", "play_addr_265"):
-        out += ds_link(video.get(khoa))
-    kq = []
-    for u in out:
-        if u.startswith("//"):
-            u = "https:" + u
-        if u.startswith("http") and not CHI_CO_TIENG.search(u) and "/media-video-" not in u and u not in kq:
-            kq.append(u)
-    return kq
+        nhom_tho.append(ds_link(video.get(khoa)))
+    kq, nhom = [], []
+    for ds in nhom_tho:
+        sach = []
+        for u in ds:
+            if u.startswith("//"):
+                u = "https:" + u
+            if u.startswith("http") and not CHI_CO_TIENG.search(u) and "/media-video-" not in u and u not in kq:
+                kq.append(u)
+                sach.append(u)
+        if sach:
+            nhom.append(sach)
+    return nhom if theo_nhom else kq
 
 
-_DOUYIN_PHIEN = {}   # phiên trình duyệt của lần lấy dữ liệu Douyin thành công gần nhất
+_DOUYIN_PHIEN = {}   # cookie của lần lấy dữ liệu Douyin thành công gần nhất (dùng lại khi phải mở phiên trình duyệt mới)
+
+# Trang Douyin tải ~350 file trước khi trả dữ liệu video: mở trình duyệt mới cho mỗi link mất 9-11 giây, còn giữ nguyên
+# MỘT phiên (bộ nhớ đệm còn nguyên) thì từ link thứ hai chỉ mất 4-5 giây. Playwright chỉ dùng được trong đúng luồng đã
+# tạo ra nó, nên có một luồng riêng giữ trình duyệt Douyin; các luồng tải gửi mã video vào hàng đợi rồi chờ kết quả.
+_DY = {"q": None, "th": None, "khoa": threading.Lock(), "bo_qua_den": 0.0, "may_cham": {}}
+_DY_NGHI = 40                        # giây không có link Douyin nào thì đóng trình duyệt
+DOUYIN_TOC_DO_TOI_THIEU = 400_000    # byte/giây: máy chủ video chậm hơn mức này thì đổi sang máy chủ khác
 
 
-def do_douyin_trinh_duyet(video_id: str):
-    """Mở douyin.com/video/<mã> bằng trình duyệt ẩn và đọc dữ liệu CHÍNH THỨC của đúng video đó
-    (không bắt bừa video đang phát trên trang, vì trang Douyin còn phát cả video gợi ý và clip giao diện).
-    Trả về (danh sách link phát, thời lượng giây)."""
-    if TRANG_THAI_TD != "ok":
-        raise RuntimeError(f"trình duyệt ẩn không chạy ({TRANG_THAI_TD})")
+class MayChuCham(RuntimeError):
+    """Máy chủ video trả file quá chậm: nên thử máy chủ khác của cùng video."""
+
+
+def _douyin_dong(st):
+    for k in ("ctx", "b"):
+        try:
+            if st.get(k) is not None:
+                st[k].close()
+        except Exception:
+            pass
+        st[k] = None
+
+
+def _douyin_mo_phien(st, proxy, moi=False):
+    """Mở (hoặc dùng lại) trình duyệt và phiên Douyin. moi=True: bỏ phiên đang có, mở phiên trắng."""
+    if st.get("b") is not None and st.get("proxy") != proxy:
+        _douyin_dong(st)   # đổi proxy -> phải mở lại trình duyệt
+    if st.get("b") is None:
+        _TL.proxy = proxy
+        st["b"] = mo_trinh_duyet(st["p"])
+        st["proxy"] = proxy
+        st["ctx"] = None
+        if st["b"] is None:
+            raise RuntimeError("không mở được trình duyệt ẩn")
+    if moi and st.get("ctx") is not None:
+        try:
+            st["ctx"].close()
+        except Exception:
+            pass
+        st["ctx"] = None
+    if st.get("ctx") is None:
+        st["ctx"] = st["b"].new_context(user_agent=UA, locale="zh-CN", viewport={"width": 1280, "height": 900},
+                                        storage_state=None if moi else _DOUYIN_PHIEN.get("p"))
+    return st["ctx"]
+
+
+def _douyin_doc(st, video_id: str, proxy):
+    """(Chạy trong luồng Douyin) Mở douyin.com/video/<mã> và đọc dữ liệu CHÍNH THỨC của đúng video đó
+    (không bắt bừa video đang phát trên trang, vì trang Douyin còn phát cả video gợi ý và clip giao diện)."""
     import json
+    import time
     from urllib.parse import unquote
-    from playwright.sync_api import sync_playwright
 
     nhan = []      # dữ liệu aweme_detail đúng mã
     tu_choi = []   # lý do Douyin trả về khi không cho xem
@@ -867,114 +913,253 @@ def do_douyin_trinh_duyet(video_id: str):
                     return r
         return None
 
-    with sync_playwright() as p:
-        b = mo_trinh_duyet(p)
-        if b is None:
-            raise RuntimeError("không mở được trình duyệt ẩn")
-        try:
-            ctx = page = None
-            for lan in range(4):
-                # Douyin thỉnh thoảng trả dữ liệu rỗng: thử tải lại trang, rồi mở phiên trình duyệt mới
-                if lan % 2 == 0:
-                    if ctx is not None:
-                        ctx.close()
-                        import time
-                        time.sleep(4)
-                    # Dùng lại phiên (cookie) của lần lấy được gần nhất: Douyin ít trả rỗng hơn hẳn
-                    ctx = b.new_context(user_agent=UA, locale="zh-CN", viewport={"width": 1280, "height": 900},
-                                        storage_state=_DOUYIN_PHIEN.get("p") if lan == 0 else None)
+    ctx = page = None
+    try:
+        for lan in range(4):
+            # Douyin thỉnh thoảng trả dữ liệu rỗng: thử tải lại trang, rồi bỏ phiên đang dùng và mở phiên trắng
+            if lan % 2 == 0:
+                if lan:
+                    time.sleep(4)
+                try:
+                    ctx = _douyin_mo_phien(st, proxy, moi=bool(lan))
                     page = ctx.new_page()
-                    page.on("response", on_response)
-                try:
-                    if lan % 2 == 0:
-                        page.goto(f"https://www.douyin.com/video/{video_id}", wait_until="domcontentloaded", timeout=45000)
-                    else:
-                        page.reload(wait_until="domcontentloaded", timeout=45000)   # đã có cookie mới -> thử lại
                 except Exception:
-                    pass
-                for _ in range(24):
-                    if nhan:
-                        break
-                    page.wait_for_timeout(500)
-                if nhan:
-                    break
-                try:
-                    m = re.search(r'<script id="RENDER_DATA"[^>]*>([^<]+)</script>', page.content())
-                    a = tim_trong_trang(json.loads(unquote(m.group(1)))) if m else None
-                    if a:
-                        nhan.append(a)
-                        break
-                except Exception:
-                    pass
+                    _douyin_dong(st)   # trình duyệt giữ từ link trước đã chết -> mở lại từ đầu
+                    ctx = _douyin_mo_phien(st, proxy, moi=True)
+                    page = ctx.new_page()
+                page.on("response", on_response)
             try:
-                if nhan:
-                    _DOUYIN_PHIEN["p"] = ctx.storage_state()
+                if lan % 2 == 0:
+                    page.goto(f"https://www.douyin.com/video/{video_id}", wait_until="domcontentloaded", timeout=45000)
                 else:
-                    _DOUYIN_PHIEN.pop("p", None)
+                    page.reload(wait_until="domcontentloaded", timeout=45000)   # đã có cookie mới -> thử lại
             except Exception:
                 pass
-        finally:
-            b.close()
+            try:
+                for _ in range(48):
+                    if nhan:
+                        break
+                    page.wait_for_timeout(250)
+                if nhan:
+                    break
+                m = re.search(r'<script id="RENDER_DATA"[^>]*>([^<]+)</script>', page.content())
+                a = tim_trong_trang(json.loads(unquote(m.group(1)))) if m else None
+                if a:
+                    nhan.append(a)
+                    break
+            except Exception:
+                pass
+        try:
+            if nhan:
+                _DOUYIN_PHIEN["p"] = ctx.storage_state()
+        except Exception:
+            pass
+    finally:
+        try:
+            if page is not None:
+                page.close()   # đóng trang (video trong trang đang phát), GIỮ phiên cho link sau
+        except Exception:
+            pass
+        if not nhan:
+            # không lấy được: link sau bắt đầu bằng phiên trắng, đừng dùng lại phiên có thể đã bị Douyin nghi ngờ
+            _DOUYIN_PHIEN.pop("p", None)
+            try:
+                if st.get("ctx") is not None:
+                    st["ctx"].close()
+            except Exception:
+                pass
+            st["ctx"] = None
     if not nhan:
         raise RuntimeError("Douyin không trả dữ liệu của video này"
                            + (f" ({tu_choi[-1]})" if tu_choi else " (video có thể đã bị xóa/ẩn, hoặc Douyin đang chặn)"))
-    ad = nhan[0]
+    return nhan[0]
+
+
+def _douyin_luong():
+    """Luồng giữ trình duyệt Douyin. Tự đóng trình duyệt và kết thúc sau _DY_NGHI giây không có việc."""
+    import queue
+
+    q = _DY["q"]
+    st = {}
+    try:
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            st["p"] = p
+            try:
+                while True:
+                    try:
+                        viec = q.get(timeout=_DY_NGHI)
+                    except queue.Empty:
+                        viec = None
+                    if viec is None:
+                        with _DY["khoa"]:
+                            if q.empty():   # kiểm tra trong khóa: không bỏ rơi việc vừa được gửi vào
+                                _DY["th"] = _DY["q"] = None
+                                return
+                        continue
+                    video_id, proxy, kq = viec
+                    try:
+                        kq["ad"] = _douyin_doc(st, video_id, proxy)
+                    except BaseException as e:
+                        kq["loi"] = e
+                    finally:
+                        kq["xong"].set()
+            finally:
+                _douyin_dong(st)
+    except BaseException as e:
+        # Playwright không khởi động được: báo lỗi cho mọi link đang chờ thay vì để chúng chờ mãi
+        with _DY["khoa"]:
+            if _DY["q"] is q:
+                _DY["th"] = _DY["q"] = None
+        while True:
+            try:
+                viec = q.get_nowait()
+            except Exception:
+                break
+            if viec:
+                viec[2]["loi"] = RuntimeError(f"trình duyệt ẩn lỗi: {str(e)[:120]}")
+                viec[2]["xong"].set()
+
+
+def dong_phien_douyin():
+    """Đóng trình duyệt Douyin đang giữ (gọi khi xong một lượt tải). Không gọi cũng được: nó tự đóng sau 40 giây."""
+    with _DY["khoa"]:
+        if _DY["q"] is not None:
+            _DY["q"].put(None)
+
+
+def do_douyin_trinh_duyet(video_id: str):
+    """Lấy dữ liệu chính thức của video Douyin qua trình duyệt ẩn (một phiên dùng chung cho mọi link Douyin).
+    Trả về (các nhóm link phát - mỗi nhóm là các máy chủ khác nhau của CÙNG một mức chất lượng, thời lượng giây)."""
+    if TRANG_THAI_TD != "ok":
+        raise RuntimeError(f"trình duyệt ẩn không chạy ({TRANG_THAI_TD})")
+    import queue
+
+    kq = {"xong": threading.Event()}
+    with _DY["khoa"]:
+        if _DY["th"] is None or not _DY["th"].is_alive():
+            _DY["q"] = queue.Queue()
+            _DY["th"] = threading.Thread(target=_douyin_luong, daemon=True, name="douyin")
+            _DY["th"].start()
+        _DY["q"].put((video_id, proxy_hien_tai(), kq))
+    if not kq["xong"].wait(240):
+        raise RuntimeError("trình duyệt ẩn không phản hồi sau 4 phút")
+    if "loi" in kq:
+        raise kq["loi"]
+    ad = kq["ad"]
     video = ad.get("video") or {}
-    link = _douyin_link_tu_du_lieu(video)
-    if not link:
+    nhom = _douyin_link_tu_du_lieu(video, theo_nhom=True)
+    if not nhom:
         if ad.get("images"):
             raise RuntimeError("bài Douyin này là bộ ẢNH, không phải video")
         raise RuntimeError("dữ liệu Douyin không có link phát")
     giay = float(video.get("duration") or 0)
-    return link, (giay / 1000 if giay > 1000 else giay)
+    return nhom, (giay / 1000 if giay > 1000 else giay)
+
+
+def _ten_may(u: str) -> str:
+    return re.sub(r"^https?://([^/:?#]+).*", r"", u).lower()
 
 
 def tai_douyin(video_id: str, outdir: Path, name: str, ffmpeg_dir):
-    """Tải đúng video Douyin theo mã, rồi kiểm tra file: phải có hình và dài đúng như Douyin báo."""
-    link, giay = do_douyin_trinh_duyet(video_id)
+    """Tải đúng video Douyin theo mã, rồi kiểm tra file: phải có hình và dài đúng như Douyin báo.
+    Mỗi mức chất lượng có 2-3 máy chủ; tốc độ của chúng rất thất thường (cùng một file: 40 MB/giây hoặc 30 KB/giây),
+    nên máy chủ nào chậm thì đổi ngay sang máy chủ khác của CÙNG mức chất lượng, không hạ chất lượng."""
+    import time
+
+    nhom_ds, giay = do_douyin_trinh_duyet(video_id)
     dich = outdir / f"{name}.mp4"
     loi = []
-    for u in link[:6]:
+
+    def thu(u, toi_thieu):
+        """Trả về (file, cách lấy), hoặc None nếu link này hỏng. Ném MayChuCham khi máy chủ quá chậm."""
         don_rac(outdir, name)
         try:
-            tai_truc_tiep(u, dich, UA, "https://www.douyin.com/")
+            tai_truc_tiep(u, dich, UA, "https://www.douyin.com/", toc_do_toi_thieu=toi_thieu)
+        except MayChuCham:
+            raise
         except Exception as e:
             loi.append(str(e)[:70])
-            continue
+            return None
         kt = kiem_tra_luong(dich, ffmpeg_dir)
         if kt:
             co_hinh, co_tieng, dai = kt
             if not co_hinh or (giay and dai and abs(dai - giay) > max(2.0, giay * 0.05)):
                 dich.unlink(missing_ok=True)
                 loi.append(f"file không khớp (hình: {co_hinh}, dài {dai:.0f}s, Douyin báo {giay:.0f}s)")
-                continue
+                return None
             if not co_tieng:
                 return dich, f"Douyin: dữ liệu chính thức, mã {video_id} (CẦN KIỂM TRA: file không có tiếng)"
         return dich, f"Douyin: dữ liệu chính thức, mã {video_id}"
+
+    da_thu = 0
+    for nhom in nhom_ds:
+        if da_thu >= 6:
+            break
+        cham = []
+        # Máy chủ vừa chậm ở link trước (trong 10 phút) thì xếp sau, khỏi mất vài giây thử lại nó
+        nhom = sorted(nhom[:4], key=lambda x: time.time() - _DY["may_cham"].get(_ten_may(x), 0) < 600)
+        for u in nhom:
+            da_thu += 1
+            # Vừa thấy MỌI máy chủ đều chậm (đường truyền của máy này chậm) -> tạm thôi so tốc độ, khỏi mất công đổi
+            toi_thieu = 0 if time.time() < _DY["bo_qua_den"] else DOUYIN_TOC_DO_TOI_THIEU
+            try:
+                kq = thu(u, toi_thieu)
+            except MayChuCham as e:
+                cham.append(u)
+                _DY["may_cham"][_ten_may(u)] = time.time()
+                loi.append(str(e)[:70])
+                print(f"    {e} -> đổi sang máy chủ khác của cùng video.")
+                continue
+            if kq:
+                return kq
+        if cham and len(cham) == len(nhom):
+            _DY["bo_qua_den"] = time.time() + 600
+        for u in cham[:2]:
+            print("    Các máy chủ video Douyin đều đang chậm: tải tiếp ở tốc độ thấp (không hạ chất lượng).")
+            kq = thu(u, 0)
+            if kq:
+                return kq
+    don_rac(outdir, name)
     raise RuntimeError("có link phát nhưng không tải được: " + "; ".join(dict.fromkeys(loi)))
 
 
-def tai_truc_tiep(u: str, dest: Path, ua: str, referer: str):
-    """Tải thẳng 1 file video (không qua yt-dlp)."""
+def tai_truc_tiep(u: str, dest: Path, ua: str, referer: str, toc_do_toi_thieu: int = 0):
+    """Tải thẳng 1 file video (không qua yt-dlp).
+    toc_do_toi_thieu > 0 (byte/giây): sau 3 giây mà tốc độ còn dưới mức này và phần còn lại cần hơn 15 giây nữa
+    thì bỏ, ném MayChuCham để nơi gọi thử máy chủ khác."""
+    import time
     import urllib.request
 
     req = urllib.request.Request(u, headers={"User-Agent": ua, "Referer": referer, "Accept": "*/*"})
     tam = dest.with_name(dest.name + ".part")
-    with _mo_url(req, 60) as r:
-        ct = (r.headers.get("Content-Type") or "").lower()
-        if not (ct.startswith("video/") or "octet-stream" in ct):
-            raise RuntimeError(f"máy chủ không trả về video ({ct or 'không rõ loại'})")
-        tong = int(r.headers.get("Content-Length") or 0)
-        da = 0
-        with open(tam, "wb") as fh:
-            while True:
-                khoi = r.read(256 * 1024)
-                if not khoi:
-                    break
-                fh.write(khoi)
-                da += len(khoi)
-                if PROGRESS_HOOK:
-                    PROGRESS_HOOK({"status": "downloading", "downloaded_bytes": da, "total_bytes": tong or None})
+    try:
+        with _mo_url(req, 60) as r:
+            ct = (r.headers.get("Content-Type") or "").lower()
+            if not (ct.startswith("video/") or "octet-stream" in ct):
+                raise RuntimeError(f"máy chủ không trả về video ({ct or 'không rõ loại'})")
+            tong = int(r.headers.get("Content-Length") or 0)
+            da = 0
+            t0 = time.time()
+            khoi_lon = 64 * 1024 if toc_do_toi_thieu else 256 * 1024
+            with open(tam, "wb") as fh:
+                while True:
+                    khoi = r.read(khoi_lon)
+                    if not khoi:
+                        break
+                    fh.write(khoi)
+                    da += len(khoi)
+                    if PROGRESS_HOOK:
+                        PROGRESS_HOOK({"status": "downloading", "downloaded_bytes": da, "total_bytes": tong or None})
+                    if toc_do_toi_thieu:
+                        qua = time.time() - t0
+                        toc_do = da / max(qua, 0.001)
+                        if qua > 3 and toc_do < toc_do_toi_thieu and (not tong or (tong - da) / max(toc_do, 1) > 15):
+                            may = re.sub(r"^https?://([^/]+).*", r"\1", r.geturl())
+                            raise MayChuCham(f"Máy chủ video {may} đang chậm ({toc_do / 1024:.0f} KB/giây)")
+    except BaseException:
+        tam.unlink(missing_ok=True)
+        raise
     if da < KICH_THUOC_TOI_THIEU:
         tam.unlink(missing_ok=True)
         raise RuntimeError(f"file quá nhỏ ({da} byte)")
@@ -1471,20 +1656,26 @@ def _tai_mot(item, outdir: Path, ffmpeg_dir):
     if re.search(r"reddit\.com/r/[^/]+/?(\?.*)?$", url, re.I):
         raise RuntimeError("Đây là link NHÓM Reddit, không phải link bài đăng có video. Hãy thay bằng link bài đăng.")
     ghi_chu_douyin = ""
-    try:
-        return ytdlp_tai(url, outdir, name, ffmpeg_dir), "yt-dlp"
-    except Exception as e:
-        loi_goc = e
+    # Douyin mà không có cookie: yt-dlp luôn bị từ chối ("fresh cookies"), thử chỉ tốn 1-3 giây mỗi link -> đi thẳng đường riêng
+    bo_ytdlp = bool(re.search(r"douyin\.com", url, re.I)) and not COOKIE_GOP and not COOKIES_FROM_BROWSER
+    if bo_ytdlp:
+        loi_goc = RuntimeError("Douyin: không thử yt-dlp vì không có cookie")
+    else:
+        try:
+            return ytdlp_tai(url, outdir, name, ffmpeg_dir), "yt-dlp"
+        except Exception as e:
+            loi_goc = e
 
     # Douyin: link rút gọn chuyển về iesdouyin.com/share/video/<ID> mà yt-dlp không nhận
     m = re.search(r"iesdouyin\.com/share/video/(\d+)", str(loi_goc) + " " + url)
     if m:
         url = f"https://www.douyin.com/video/{m.group(1)}"
-        don_rac(outdir, name)
-        try:
-            return ytdlp_tai(url, outdir, name, ffmpeg_dir), "yt-dlp (đổi link Douyin)"
-        except Exception as e:
-            loi_goc = e
+        if not bo_ytdlp:
+            don_rac(outdir, name)
+            try:
+                return ytdlp_tai(url, outdir, name, ffmpeg_dir), "yt-dlp (đổi link Douyin)"
+            except Exception as e:
+                loi_goc = e
 
     if "douyin" in url.lower():
         # Douyin: CHỈ lấy theo đúng mã video. Không dò bừa trong trang, vì trang Douyin phát lẫn
@@ -1741,6 +1932,7 @@ def main():
         if dung:
             break
 
+    dong_phien_douyin()
     stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     report = outdir / f"_ket_qua_{stamp}.csv"
     with open(report, "w", newline="", encoding="utf-8-sig") as fh:

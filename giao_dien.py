@@ -487,6 +487,7 @@ def tho(ids):
                 it["status"] = "pending"
         os.chdir(HERE)
         T.xoa_ban_sao_cookie()
+        T.dong_phien_douyin()   # đóng trình duyệt Douyin giữ suốt lượt tải
         da_dung = S["stopping"]
         S.update(running=False, stopping=False, cur=None)
         print("Đã dừng." if da_dung else "Hoàn tất lượt tải.")
