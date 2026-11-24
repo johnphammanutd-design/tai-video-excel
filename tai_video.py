@@ -52,7 +52,7 @@ FALLBACK_LINK_COL = 3
 FALLBACK_NAME_COL = 4
 # ================================================================
 
-PHIEN_BAN = "19"
+PHIEN_BAN = "20"
 SCRIPT_DIR = Path(__file__).resolve().parent
 VIDEO_EXTS = {".mp4", ".mkv", ".webm", ".mov", ".m4v", ".flv", ".avi"}
 
@@ -770,21 +770,101 @@ def do_douyin(video_id: str):
     return out
 
 
-def douyin_id(url: str):
-    """Mã video thật của link Douyin (link rút gọn v.douyin.com được mở theo để lấy mã)."""
+_KHOA_DY_MA = threading.Lock()
+_DY_MA = {"nap": False, "ds": {}}   # link rút gọn -> mã video đã đổi được
+
+
+def _douyin_ma_da_biet(khoa: str, ma: str = None):
+    """Đọc (ma=None) hoặc ghi nhớ mã video của một link rút gọn Douyin. Nhớ cả giữa các lần mở tool
+    (_tam/douyin_ma.json): link nào đã đổi được một lần thì lần sau không phải hỏi Douyin nữa."""
+    import json
+
+    with _KHOA_DY_MA:
+        if not _DY_MA["nap"]:
+            _DY_MA["nap"] = True
+            try:
+                d = json.loads((TAM_DIR / "douyin_ma.json").read_text(encoding="utf-8"))
+                if isinstance(d, dict):
+                    _DY_MA["ds"].update({str(k): str(v) for k, v in d.items() if str(v).isdigit()})
+            except Exception:
+                pass
+        if ma is None:
+            return _DY_MA["ds"].get(khoa)
+        if _DY_MA["ds"].get(khoa) != ma:
+            _DY_MA["ds"][khoa] = ma
+            try:
+                TAM_DIR.mkdir(exist_ok=True)
+                gan_day = dict(list(_DY_MA["ds"].items())[-5000:])
+                (TAM_DIR / "douyin_ma.json").write_text(json.dumps(gan_day), encoding="utf-8")
+            except Exception:
+                pass
+        return ma
+
+
+def douyin_id(url: str, ly_do: list = None):
+    """Mã video thật của link Douyin. Link rút gọn v.douyin.com được đổi bằng cách đọc địa chỉ CHUYỂN HƯỚNG
+    (không tải trang đích, trang đó hay chậm/lỗi); thử tới 3 lượt, mỗi lượt 2 kiểu trình duyệt.
+    ly_do (nếu đưa vào) nhận lý do khi không đổi được, để báo cho người dùng."""
+    import time
+    import urllib.error
     import urllib.request
+    from urllib.parse import urljoin, urlsplit
 
     mau = r"(?:/(?:video|note|slides)/|[?&](?:modal_id|aweme_id|vid)=)(\d{15,})"
+    url = (url or "").strip()
     m = re.search(mau, url)
     if m:
         return m.group(1)
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": UA_DI_DONG})
-        with _mo_url(req, 25) as r:
-            m = re.search(mau, r.geturl())
-            return m.group(1) if m else None
-    except Exception:
-        return None
+    khoa = re.sub(r"[?#].*$", "", url).rstrip("/")
+    ma = _douyin_ma_da_biet(khoa)
+    if ma:
+        return ma
+
+    class KhongTheo(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, *a, **k):
+            return None
+
+    px = proxy_hien_tai()
+    mo = urllib.request.build_opener(*([KhongTheo] + ([urllib.request.ProxyHandler({"http": px, "https": px})] if px else [])))
+    loi = ""
+    for lan in range(3):
+        if lan:
+            time.sleep(1.5 * lan)
+        het_han = 0
+        for ua in (UA_DI_DONG, UA):
+            u = url
+            try:
+                for _ in range(5):
+                    try:
+                        r = mo.open(urllib.request.Request(u, headers={"User-Agent": ua, "Accept": "text/html,*/*"}), timeout=20)
+                        ma_http, noi = r.status, r.headers.get("Location")
+                        r.close()
+                    except urllib.error.HTTPError as e:
+                        ma_http, noi = e.code, e.headers.get("Location")
+                    if noi and 300 <= ma_http < 400:
+                        u = urljoin(u, noi)
+                        m = re.search(mau, u)
+                        if m:
+                            return _douyin_ma_da_biet(khoa, m.group(1))
+                        continue
+                    if ma_http == 404:
+                        het_han += 1
+                        loi = "Douyin báo link rút gọn này không tồn tại hoặc đã hết hạn"
+                    elif u != url and re.fullmatch(r"https?://(www\.)?douyin\.com/?(\?.*)?", u):
+                        # link rút gọn chết thì Douyin không báo lỗi mà đưa về trang chủ
+                        loi = "Douyin đưa link rút gọn này về trang chủ: link đã hết hạn hoặc gõ sai"
+                    else:
+                        loi = f"link rút gọn không dẫn tới video nào (dừng ở {urlsplit(u).hostname}, mã HTTP {ma_http})"
+                    break
+                else:
+                    loi = "link rút gọn chuyển hướng quá nhiều lần mà không ra video"
+            except Exception as e:
+                loi = f"không kết nối được tới Douyin để đổi link rút gọn ({' '.join(str(e).split())[:70]})"
+        if het_han == 2:
+            break   # cả hai kiểu trình duyệt đều nhận 404: thử lại cũng vô ích
+    if ly_do is not None:
+        ly_do.append(loi or "không rõ lý do")
+    return None
 
 
 def _douyin_link_tu_du_lieu(video: dict, theo_nhom: bool = False):
@@ -838,6 +918,7 @@ DOUYIN_TOC_DO_TOI_THIEU = 400_000    # byte/giây: máy chủ video chậm hơn 
 
 class MayChuCham(RuntimeError):
     """Máy chủ video trả file quá chậm: nên thử máy chủ khác của cùng video."""
+    may = ""   # tên máy chủ thực sự gửi file (sau khi chuyển hướng)
 
 
 def _douyin_dong(st):
@@ -1058,7 +1139,12 @@ def do_douyin_trinh_duyet(video_id: str):
 
 
 def _ten_may(u: str) -> str:
-    return re.sub(r"^https?://([^/:?#]+).*", r"", u).lower()
+    """Tên máy chủ trong một địa chỉ, vd. "v5-hl-mly-ov.zjcdn.com"."""
+    from urllib.parse import urlsplit
+    try:
+        return (urlsplit(u).hostname or "").lower()
+    except Exception:
+        return ""
 
 
 def tai_douyin(video_id: str, outdir: Path, name: str, ffmpeg_dir):
@@ -1098,7 +1184,12 @@ def tai_douyin(video_id: str, outdir: Path, name: str, ffmpeg_dir):
             break
         cham = []
         # Máy chủ vừa chậm ở link trước (trong 10 phút) thì xếp sau, khỏi mất vài giây thử lại nó
-        nhom = sorted(nhom[:4], key=lambda x: time.time() - _DY["may_cham"].get(_ten_may(x), 0) < 600)
+        def diem(x):
+            may = _ten_may(x)
+            if time.time() - _DY["may_cham"].get(may, 0) < 600:
+                return 2
+            return 1 if may.endswith("douyin.com") else 0
+        nhom = sorted(nhom[:4], key=diem)
         for u in nhom:
             da_thu += 1
             # Vừa thấy MỌI máy chủ đều chậm (đường truyền của máy này chậm) -> tạm thôi so tốc độ, khỏi mất công đổi
@@ -1107,7 +1198,7 @@ def tai_douyin(video_id: str, outdir: Path, name: str, ffmpeg_dir):
                 kq = thu(u, toi_thieu)
             except MayChuCham as e:
                 cham.append(u)
-                _DY["may_cham"][_ten_may(u)] = time.time()
+                _DY["may_cham"][e.may or _ten_may(u)] = time.time()
                 loi.append(str(e)[:70])
                 print(f"    {e} -> đổi sang máy chủ khác của cùng video.")
                 continue
@@ -1141,7 +1232,7 @@ def tai_truc_tiep(u: str, dest: Path, ua: str, referer: str, toc_do_toi_thieu: i
             tong = int(r.headers.get("Content-Length") or 0)
             da = 0
             t0 = time.time()
-            khoi_lon = 64 * 1024 if toc_do_toi_thieu else 256 * 1024
+            khoi_lon = 16 * 1024 if toc_do_toi_thieu else 256 * 1024
             with open(tam, "wb") as fh:
                 while True:
                     khoi = r.read(khoi_lon)
@@ -1155,8 +1246,9 @@ def tai_truc_tiep(u: str, dest: Path, ua: str, referer: str, toc_do_toi_thieu: i
                         qua = time.time() - t0
                         toc_do = da / max(qua, 0.001)
                         if qua > 3 and toc_do < toc_do_toi_thieu and (not tong or (tong - da) / max(toc_do, 1) > 15):
-                            may = re.sub(r"^https?://([^/]+).*", r"\1", r.geturl())
-                            raise MayChuCham(f"Máy chủ video {may} đang chậm ({toc_do / 1024:.0f} KB/giây)")
+                            loi_cham = MayChuCham(f"Máy chủ video {_ten_may(r.geturl())} đang chậm ({toc_do / 1024:.0f} KB/giây)")
+                            loi_cham.may = _ten_may(r.geturl())
+                            raise loi_cham
     except BaseException:
         tam.unlink(missing_ok=True)
         raise
@@ -1680,12 +1772,15 @@ def _tai_mot(item, outdir: Path, ffmpeg_dir):
     if "douyin" in url.lower():
         # Douyin: CHỈ lấy theo đúng mã video. Không dò bừa trong trang, vì trang Douyin phát lẫn
         # video gợi ý, clip giao diện và các đoạn tách riêng hình/tiếng -> rất dễ tải nhầm.
-        ma = (m.group(1) if m else None) or douyin_id(item["link"])
+        ly_do_ma = []
+        ma = (m.group(1) if m else None) or douyin_id(item["link"], ly_do_ma)
         if not ma:
             m2 = re.search(r"\[Douyin\]\s*(\d+)", str(loi_goc))
             ma = m2.group(1) if m2 else None
         if not ma:
-            raise RuntimeError(f"Không đọc được mã video từ link Douyin này. Lỗi gốc: {loi_goc}")
+            raise RuntimeError("Không đổi được link Douyin rút gọn ra video: " + (ly_do_ma[-1] if ly_do_ma else "không rõ lý do")
+                               + ". Mở link này trên trình duyệt; nếu video vẫn xem được thì bấm Chia sẻ > Sao chép liên kết "
+                                 "rồi dán link mới bằng nút Sửa link (nút bút chì).")
         don_rac(outdir, name)
         try:
             return tai_douyin(ma, outdir, name, ffmpeg_dir)

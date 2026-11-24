@@ -1,9 +1,9 @@
 {
-  "phien_ban": "19",
-  "the": "v19",
-  "ghi_chu": "Tải Douyin nhanh hơn khoảng hai lần: giữ một phiên trình duyệt cho cả lượt, tự đổi máy chủ video khi chậm",
+  "phien_ban": "20",
+  "the": "v20",
+  "ghi_chu": "Douyin: sửa lỗi nhớ máy chủ video chậm của bản 19; đổi link rút gọn chắc hơn và nhớ mã video đã đổi được",
   "files": {
-    "tai_video.py": "4c4f3a5c170d36fa42f31eb496c0ade9c77d8855a29c9055473d1006bc828e1a",
+    "tai_video.py": "b5eb147fc7dc50811b5cda6f4bb47a5ee8f035d578c880a119e46d6fdd538ea2",
     "giao_dien.py": "af1a289f6582a76aad6511f76303f08c0398ff75200d8bf5d44b9a4c3700994f",
     "giao_dien.html": "7de30e5ef2d45edc90eb94f0e56b3dd652911722b330b49c4db1527fc02fcd25",
     "HUONG_DAN.txt": "f089f3f8b3ff622444120333b7442597e9bba50d9a4d8508c059008bcbbcc4e7"

@@ -2,7 +2,7 @@
 ; AppId và thư mục cài GIỮ NGUYÊN như bản cũ để cài đè lên bản "Tải Video Excel" đang có trên máy.
 #define TenApp "HT CREATIVE AGENT"
 #define TenCu "Tải Video Excel"
-#define PhienBan "1.19"
+#define PhienBan "1.20"
 
 [Setup]
 AppId={{6F3B5C0E-7B1D-4C55-9E21-0A4D8E2F71C3}
